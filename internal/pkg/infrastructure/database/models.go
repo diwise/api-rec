@@ -1,5 +1,10 @@
 package database
 
+import (
+	"strings"
+	"time"
+)
+
 type Property struct {
 	Id   string `json:"@id"`
 	Type string `json:"@type"`
@@ -12,34 +17,47 @@ type Entity struct {
 	IsPartOf *Property `json:"isPartOf,omitempty"`
 }
 
-func NewSpace(id string) Entity {
-	return Entity{
-		Context: "https://dev.realestatecore.io/contexts/Space.jsonld",
-		Type:    "dtmi:org:w3id:rec:Space;1",
-		Id:      id,
-	}
+type SensorObservation struct {
+	Format       string        `json:"format"`
+	DeviceID     string        `json:"deviceId"`
+	Observations []Observation `json:"observations"`
 }
 
-func NewBuilding(id string) Entity {
-	return Entity{
-		Context: "https://dev.realestatecore.io/contexts/Building.jsonld",
-		Type:    "dtmi:org:w3id:rec:Building;1",
-		Id:      id,
-	}
+type Observation struct {
+	ObservationTime time.Time `json:"observationTime"`
+	Value           *float64  `json:"value,omitempty"`
+	ValueString     *string   `json:"valueString,omitempty"`
+	ValueBoolean    *bool     `json:"valueBoolean,omitempty"`
+	QuantityKind    string    `json:"quantityKind"`
+	SensorId        string    `json:"sensorId"`
 }
 
-func NewSensor(id string) Entity {
-	return Entity{
-		Context: "https://dev.realestatecore.io/contexts/Sensor.jsonld",
-		Type:    "dtmi:org:brickschema:schema:Brick:Sensor;1",
-		Id:      id,
-	}
-}
+const (
+	SpaceContext             string = "https://dev.realestatecore.io/contexts/Space.jsonld"
+	SpaceType                string = "dtmi:org:w3id:rec:Space;1"
+	SpaceTypeName            string = "space"
+	BuildingContext          string = "https://dev.realestatecore.io/contexts/Building.jsonld"
+	BuildingType             string = "dtmi:org:w3id:rec:Building;1"
+	BuildingTypeName         string = "building"
+	SensorContext            string = "https://dev.realestatecore.io/contexts/Sensor.jsonld"
+	SensorType               string = "dtmi:org:brickschema:schema:Brick:Sensor;1"
+	SensorTypeName           string = "sensor"
+	ObservationEventContext  string = "https://dev.realestatecore.io/contexts/ObservationEvent.jsonld"
+	ObservationEventType     string = "dtmi:org:w3id:rec:ObservationEvent;1"
+	ObservationEventTypeName string = "observationevent"
+)
 
-func NewObservationEvent(id string) Entity {
-	return Entity{
-		Context: "https://dev.realestatecore.io/contexts/ObservationEvent.jsonld",
-		Type:    "dtmi:org:w3id:rec:ObservationEvent;1",
-		Id:      id,
+func GetTypeFromTypeName(typeName string) string {
+	switch strings.ToLower(typeName) {
+	case SpaceTypeName:
+		return SpaceType
+	case BuildingTypeName:
+		return BuildingType
+	case SensorTypeName:
+		return SensorType
+	case ObservationEventTypeName:
+		return ObservationEventType
+
 	}
+	return ""
 }

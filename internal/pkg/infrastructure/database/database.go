@@ -3,9 +3,11 @@ package database
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/diwise/service-chassis/pkg/infrastructure/env"
 	"github.com/diwise/service-chassis/pkg/infrastructure/o11y/logging"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -21,7 +23,10 @@ type Config struct {
 type Database interface {
 	AddEntity(ctx context.Context, e Entity) error
 	GetEntity(ctx context.Context, entityID, entityType string) (Entity, error)
+	GetEntities(ctx context.Context, entityType string) ([]Entity, error)
 	GetChildEntities(ctx context.Context, root Entity, entityType string) ([]Entity, error)
+	AddObservation(ctx context.Context, so SensorObservation) error
+	GetObservations(ctx context.Context, sensorId string, starting, ending time.Time) ([]Observation, error)
 }
 
 type databaseImpl struct {
@@ -176,6 +181,47 @@ func (db *databaseImpl) GetChildEntities(ctx context.Context, root Entity, entit
 	return entities, nil
 }
 
+func (db *databaseImpl) GetEntities(ctx context.Context, entityType string) ([]Entity, error) {
+	rows, err := db.pool.Query(ctx, `
+		SELECT node_id, entity_id, entity_type, entity_context 
+		FROM entity 
+		WHERE entity_type = $1`,  entityType)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	entities := make([]Entity, 0)
+
+	for rows.Next() {
+		var nodeId_ int64
+		var entityId_, entityType_, entityContext_ string
+		
+		err := rows.Scan(&nodeId_, &entityId_, &entityType_, &entityContext_)
+		if err != nil {
+			return nil, err
+		}
+
+		e := Entity{
+			Context: entityContext_,
+			Id:      entityId_,
+			Type:    entityType_,			
+		}
+
+		parent, err := db.getParentEntity(ctx, nodeId_)
+		if err == nil {
+			e.IsPartOf = &Property{
+				Id:   parent.Id,
+				Type: parent.Type,
+			}
+		}
+
+		entities = append(entities, e)
+	}
+
+	return entities, nil
+}
+
 func (db *databaseImpl) GetEntity(ctx context.Context, entityID, entityType string) (Entity, error) {
 	var nodeId_ int64
 	var entityId_, entityType_, entityContext_ string
@@ -202,6 +248,70 @@ func (db *databaseImpl) GetEntity(ctx context.Context, entityID, entityType stri
 	}
 
 	return e, nil
+}
+
+func (db *databaseImpl) AddObservation(ctx context.Context, so SensorObservation) error {
+	tx, err := db.pool.BeginTx(ctx, pgx.TxOptions{
+		IsoLevel: pgx.ReadCommitted,
+		AccessMode: pgx.ReadWrite,
+		DeferrableMode: pgx.Deferrable,
+	})
+	if err != nil {
+		return err
+	}
+
+	for _, o := range so.Observations {
+		_, err := db.pool.Exec(ctx, `
+			INSERT INTO observations (device_id, sensor_id, observationTime, value, valueString, valueBoolean, quantityKind) 
+			VALUES ($1, $2, $3, $4, $5, $6, $7)`, so.DeviceID, o.SensorId, o.ObservationTime, o.Value, o.ValueString, o.ValueBoolean, o.QuantityKind)	
+		if err != nil {
+			tx.Rollback(ctx)
+			return err
+		}
+	}
+
+	return tx.Commit(ctx)
+}
+
+func (db *databaseImpl) GetObservations(ctx context.Context, sensorId string, starting, ending time.Time) ([]Observation, error) {
+	rows, err := db.pool.Query(ctx, `
+		SELECT observationTime, value, valueString, valueBoolean, quantityKind 
+		FROM observations
+		WHERE sensor_id = $1
+		  AND observationTime BETWEEN $2 AND $3
+		ORDER BY observationTime ASC`, sensorId, starting, ending)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	observations := make([]Observation, 0)
+
+	for rows.Next() {
+		var ot time.Time
+		var v *float64
+		var vs *string
+		var vb *bool
+		var qk string
+
+		err := rows.Scan(&ot, &v, &vs, &vb, &qk)
+		if err != nil {
+			return nil, err
+		}
+
+		observation := Observation{
+			SensorId: sensorId,
+			ObservationTime: ot,
+			Value: v,
+			ValueString: vs,
+			ValueBoolean: vb,
+			QuantityKind: qk,
+		}
+
+		observations = append(observations, observation)
+	}
+
+	return observations, nil
 }
 
 /*
@@ -237,5 +347,63 @@ CREATE table relation (
 );
 
 CREATE INDEX relation_child_parent_indx ON relation(child, parent);
+
+CREATE TYPE quantity_kind AS ENUM (
+	'Acceleration',
+	'Angle',
+	'AngularAcceleration',
+	'AngularVelocity',
+	'Area',
+	'Capacitance',
+	'Concentration',
+	'Conductivity',
+	'DataRate',
+	'DataSize',
+	'Density',
+	'Distance',
+	'Efficiency',
+	'ElectricCharge',
+	'ElectricCurrent',
+	'Energy',
+	'Force',
+	'Frequency',
+	'Illuminance',
+	'Inductance',
+	'Irradiance',
+	'Length',
+	'Luminance',
+	'LuminousFlux',
+	'LuminousIntensity',
+	'MagneticFlux',
+	'MagneticFluxDensity',
+	'Mass',
+	'MassFlowRate',
+	'Power',
+	'PowerFactor',
+	'Pressure',
+	'RelativeHumidity',
+	'Resistance',
+	'SoundPressureLevel',
+	'Temperature',
+	'Thrust',
+	'Time',
+	'Torque',
+	'Velocity',
+	'Voltage',
+	'Volume',
+	'VolumeFlowRate'
+);
+
+CREATE table observations (
+	observation_id 	BIGSERIAL,
+	device_id		TEXT NOT NULL,
+	sensor_id 		TEXT NOT NULL,
+	observationTime	TIMESTAMPTZ NOT NULL,
+	value 			NUMERIC NULL,
+	valueString		TEXT NULL,
+	valueBoolean	BOOLEAN NULL,
+	quantityKind	quantity_kind NOT NULL,
+	PRIMARY KEY (observation_id)
+);
 
 */

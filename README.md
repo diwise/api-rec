@@ -23,6 +23,54 @@ sensor -> iot-agent -> iot-events -> api-rec
 }
 ```
 
+### QuantityKind
+
+[Units](https://doc.realestatecore.io/3.3/units.html)
+
+Acceleration
+Angle
+AngularAcceleration
+AngularVelocity
+Area
+Capacitance
+Concentration
+Conductivity
+DataRate
+DataSize
+Density
+Distance
+Efficiency
+ElectricCharge
+ElectricCurrent
+Energy
+Force
+Frequency
+Illuminance
+Inductance
+Irradiance
+Length
+Luminance
+LuminousFlux
+LuminousIntensity
+MagneticFlux
+MagneticFluxDensity
+Mass
+MassFlowRate
+Power
+PowerFactor
+Pressure
+RelativeHumidity
+Resistance
+SoundPressureLevel
+Temperature
+Thrust
+Time
+Torque
+Velocity
+Voltage
+Volume
+VolumeFlowRate
+
 [https://github.com/RealEstateCore/rec/blob/main/API/Edge/edge_message.schema.json](https://github.com/RealEstateCore/rec/blob/main/API/Edge/edge_message.schema.json)
 
 Skillnden mellan `deviceId` och `sensorId` är att ett `device` kan ha en eller flera `sensor`er i samma "låda".

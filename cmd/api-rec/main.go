@@ -11,7 +11,6 @@ import (
 	"github.com/diwise/service-chassis/pkg/infrastructure/o11y"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/rs/cors"
 )
 
 const serviceName string = "api-rec"
@@ -27,12 +26,6 @@ func main() {
 	}
 
 	r := chi.NewRouter()
-
-	r.Use(cors.New(cors.Options{
-		AllowedOrigins:   []string{"*"},
-		AllowCredentials: true,
-		Debug:            false,
-	}).Handler)
 
 	api.RegisterEndpoints(ctx, r, db)
 
