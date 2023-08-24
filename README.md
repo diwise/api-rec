@@ -371,3 +371,5 @@ CREATE TYPE quantity_kind AS ENUM (
 - säkerhet
 - bättre översättning mellan lwm2m och REC
 - bättre översättning mellan functions och REC
+- test
+- ???
