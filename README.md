@@ -2,11 +2,70 @@
 
 En *spike* för ett API. Lite finns det kod för att ev. bygga vidare på.
 
-# In
+**POST** `/api/spaces`
+
+**GET** `/api/spaces`
+
+**POST** `/api/buildings`
+
+**GET** `/api/buildings`
+
+**POST** `/api/sensors`
+
+**GET** `/api/sensors`
+
+**POST** `/api/observations`
+
+**GET** `/api/observations`
+
+`root[id]` - id för root-objekt
+
+`root[type]` - typ för root-objekt
+
+`hasObservationTime[starting]` - starttidpunkt för tidsspann med observationer
+
+`hasObservationTime[ending]` - sluttidpunkt för tidsspann med observationer
 
 ## Sensorvärden
 
-sensor -> iot-agent -> iot-events -> api-rec
+`api-rec` tar emot meddelanden och lagrar data i ett tidsserie format.
+
+### Cloudevents
+
+`iot-events` konfigureras att POST ett cloudevent till api-rec endpoint `/api/cloudevents`. Event som ska POST:as är `message.accepted` och `function.updated`.
+
+```yaml
+subscribers:
+  - id: api-rec-devices
+    name: MessageAccepted
+    type: message.accepted
+    endpoint: http://api-rec:8080/api/cloudevents
+    source: github.com/diwise/iot-agent
+    eventType: message.accepted
+    tenants:
+      - default
+    entities:
+  - id: api-rec-functions
+    name: FunctionUpdated
+    type: function.updated
+    endpoint: http://api-rec:8080/api/cloudevents
+    source: github.com/diwise/iot-core
+    eventType: function.updated
+    tenants:
+      - default
+    entities:
+
+```
+
+Flödet blir då: sensor -> iot-agent -> iot-events -> cloudevents -> api-rec
+
+`api-rec` kommer tolka händelserna och skapa `observations` från dem.
+
+### REST
+
+-> api-rec
+
+En `observation` kan också POST:as direkt till `/api/observations`.
 
 ```json
 {
@@ -27,60 +86,40 @@ sensor -> iot-agent -> iot-events -> api-rec
 
 [Units](https://doc.realestatecore.io/3.3/units.html)
 
-Acceleration
-Angle
-AngularAcceleration
-AngularVelocity
-Area
-Capacitance
-Concentration
-Conductivity
-DataRate
-DataSize
-Density
-Distance
-Efficiency
-ElectricCharge
-ElectricCurrent
-Energy
-Force
-Frequency
-Illuminance
-Inductance
-Irradiance
-Length
-Luminance
-LuminousFlux
-LuminousIntensity
-MagneticFlux
-MagneticFluxDensity
-Mass
-MassFlowRate
-Power
-PowerFactor
-Pressure
-RelativeHumidity
-Resistance
-SoundPressureLevel
-Temperature
-Thrust
-Time
-Torque
-Velocity
-Voltage
-Volume
-VolumeFlowRate
+Ett urval av typer som finns i spec för REC:
+
+- Concentration
+- Energy
+- Force
+- Illuminance
+- Power
+- Pressure
+- RelativeHumidity
+- Resistance
+- Temperature
+- Volume
+
+Några extra har skapats
+
+- diwise:AirQuality
+- diwise:DigitalInput
+- diwise:Presence
+- diwise:Lifebuoy
+- diwise:Level
+- diwise:Timer
+
+och fler eller andra kommer skapas vid behov.
 
 [https://github.com/RealEstateCore/rec/blob/main/API/Edge/edge_message.schema.json](https://github.com/RealEstateCore/rec/blob/main/API/Edge/edge_message.schema.json)
 
 Skillnden mellan `deviceId` och `sensorId` är att ett `device` kan ha en eller flera `sensor`er i samma "låda".
 Dock har man i Iduns [exempel](https://github.com/idun-corp/Idun-Examples/blob/master/ProptechOS-Streaming-Api/examples/netcore/dedicated-processor/SensorObservation.cs) för ProptechOS `sensorId` för båda properties.
 
-`api-rec` tar emot meddelanden och lagrar i ett tidsserie format.
+## Skapa struktur
 
-## Struktur
+API för att stukturera fastigheter, byggnader, våningar, rum, m.m. Vi kan behöva fler/andra modeller från REC.
 
-API för att stukturera fastigheter. Vi kan behöva fler/andra modeller från REC.
+För närvarande finns endpoints för `spaces`, `buildings` och `sensors`.
 
 **POST** `/spaces`
 
@@ -122,24 +161,22 @@ API för att stukturera fastigheter. Vi kan behöva fler/andra modeller från RE
 
 `isPartOf` skapar relation mellan entiteter. Alla modeller har fler properties för metadata som inte finns med i *spiken*.
 
-# Ut
+## Hämta data
 
-Exempel med `/sensors`. Andra endpoints skulle kunna ha samma/liknande filter. Annat möjligt filter för t.ex. `/observations` skulle vara `?observationTime[starting]=2023-08-01&observationTime[ending]=2023-08-31` för att få ut data för augusti.
+Exempel med `/sensors`.
 
-Se [Time interval queries](https://github.com/RealEstateCore/rec/blob/main/API/REST/RealEstateCore_REST_specification.md#time-interval-queries) för information.
+`root[type]` och `root[id]` finns inte i spec, men faller in under [Advanced queries](https://github.com/RealEstateCore/rec/blob/main/API/REST/RealEstateCore_REST_specification.md#advanced-queries) och är tänkt svara på frågor som "ge mig alla sensorer i byggnad X".
 
-`root[type]` och `root[id]` finns inte i spec, men faller kanske in under [Advanced queries](https://github.com/RealEstateCore/rec/blob/main/API/REST/RealEstateCore_REST_specification.md#advanced-queries) och är tänkt svara på frågor som "ge mig alla sensorer i byggnad X".
-
-Möjligen måste `type` vara `dtmi:org:w3id:rec:Building;1` och inte bara `building`. Men det finns en CSV med översättningar för [endpoints](https://github.com/RealEstateCore/rec/blob/main/API/REST/Endpoints.csv).
+### Spaces, Buildings & Sensors
 
 **GET** `/sensors?root[type]=building&root[id]=79b30db6-c5d3-4cd1-a438-6d8954b330ad`
 
+Hämtar alla sensorer som finns i byggnaden med id `79b30db6-c5d3-4cd1-a438-6d8954b330ad`. `type` måste anges då olika typer (spaces, buildings o.dyl.) kan ha samma ID.
+
 ```json
 {
-  "@context": {
-    "@base": "string",
-    "hydra": "http://www.w3.org/ns/hydra/core#"
-  },
+  "@context": "http://www.w3.org/ns/hydra/context.jsonld",
+  "@id": "/api/sensors",
   "@type": "hydra:Collection",
   "hydra:totalItems": 1,
   "hydra:member": [
@@ -152,73 +189,76 @@ Möjligen måste `type` vara `dtmi:org:w3id:rec:Building;1` och inte bara `build
 }
 ```
 
-oklart vad `"@base": "string"` i första `@context` ska vara.
+### Observations
 
-**GET** `/observations?root[type]=sensor&root[id]=76bb4d31-1167-49e0-8766-768eb47c47e2&observationTime[starting]=2023-08-01&observationTime[ending]=2023-08-31`
+Se [Time interval queries](https://github.com/RealEstateCore/rec/blob/main/API/REST/RealEstateCore_REST_specification.md#time-interval-queries) för information.
+
+För `/observations` finns `?hasObservationTime[starting]` och `hasObservationTime[ending]` för att få ut data för ett visst tidsintervall.
+
+**GET** `/observations?sensor_id=76bb4d31-1167-49e0-8766-768eb47c47e2&hasObservationTime[starting]=2023-08-01&hasObservationTime[ending]=2023-08-31`
 
 ```json
 {
-  "@context": {
-    "@base": "string",
-    "hydra": "http://www.w3.org/ns/hydra/core#"
-  },
-  "@type": "hydra:Collection",
-  "hydra:totalItems": 1,
-  "hydra:member": [
-    {
-      "observationTime": "2019-05-27T20:07:44Z",
-      "value": 16.1,
-      "quantityKind": "https://w3id.org/rec/core/Temperature",
-      "sensorId" : "https://recref.com/sensor/e0d5120b-90f1-48d6-a47f-f8ccd7727b04"
-    }
-  ]
+    "@context": "http://www.w3.org/ns/hydra/context.jsonld",
+    "@id": "/api/observations",
+    "@type": "hydra:Collection",
+    "hydra:totalItems": 78,
+    "hydra:member": [
+        {
+            "observationTime": "2023-08-24T09:18:29Z",
+            "value": 12380400000000,
+            "quantityKind": "Energy",
+            "sensorId": "vp1-em01"
+        },
+       ...
+    ]
 }
 ```
 
-# Databas
+*Det finns logik som hindrar att samma värde lagras flera gånger inom en tidsperiod (nu 1 minut), dvs om sensor-X skickar värdet `42` n gånger inom samma tidsperiod kommer enbart värdet lagras första gången, de andra gångerna kastas värdet. Om sensorn däremot skickar `42`, `43`, `42` inom samma tidsperiod kommer alla tre värden att lagras.*
+
+## Databas
 
 En graf skapas med två tabeller tills det behövs en riktig grafdatabashanterare.
 
-## DDL
+### DDL
 
 ```sql
-CREATE TYPE entity_type AS ENUM (
-    'dtmi:org:w3id:rec:Space;1',
-    'dtmi:org:w3id:rec:Building;1',
-    'dtmi:org:brickschema:schema:Brick:Sensor;1',
-    'dtmi:org:w3id:rec:ObservationEvent;1'
-);
-
-CREATE TYPE entity_context AS ENUM (
-    'https://dev.realestatecore.io/contexts/Space.jsonld',
-    'https://dev.realestatecore.io/contexts/Building.jsonld',
-    'https://dev.realestatecore.io/contexts/Sensor.jsonld',
-    'https://dev.realestatecore.io/contexts/ObservationEvent.jsonld'
-);
-
-CREATE TABLE entity (
+CREATE TABLE IF NOT EXISTS entity (
     node_id        BIGSERIAL,
     entity_id      TEXT NOT NULL,
-    entity_type    entity_type NOT NULL,
-    entity_context entity_context NOT NULL,
+    entity_type    TEXT NOT NULL,
+    entity_context TEXT NOT NULL,
     PRIMARY KEY (node_id)
 );
 
-CREATE UNIQUE INDEX entity_entity_type_entity_id_unique_indx ON entity (entity_type, entity_id);
+CREATE UNIQUE INDEX IF NOT EXISTS entity_entity_type_entity_id_unique_indx ON entity (entity_type, entity_id);
 
-CREATE table relation (
+CREATE TABLE IF NOT EXISTS  relation (
     parent        BIGINT NOT NULL,
     child         BIGINT NOT NULL,
     PRIMARY KEY (parent, child)
 );
 
-CREATE INDEX relation_child_parent_indx ON relation(child, parent);
+CREATE INDEX IF NOT EXISTS relation_child_parent_indx ON relation(child, parent);
+
+CREATE TABLE IF NOT EXISTS observations (
+    observation_id    BIGSERIAL PRIMARY KEY,
+    device_id         TEXT NOT NULL,
+    sensor_id         TEXT NOT NULL,
+    observation_time  TIMESTAMPTZ NOT NULL,
+    value             NUMERIC NULL,
+    value_string      TEXT NULL,
+    value_boolean     BOOLEAN NULL,
+    quantity_kind     TEXT NOT NULL,
+    UNIQUE NULLS NOT DISTINCT (device_id, sensor_id, observation_time, value, value_string, value_boolean, quantity_kind)
+);
 
 ```
 
-`ENUM` för att säkra korrekt data. Dock ingen kontroll att ett `context` och en `type` hör ihop genom detta.
+**OBS!** `NULL NOT DISTINCT` kräver Postgres 15 eller senare.
 
-## SQL
+### SQL
 
 SQL för att svara på frågor som t.ex. "ge mig alla sensorer i byggnad X"
 
@@ -251,3 +291,78 @@ ORDER BY traverse.entity_id ASC
 ```
 
 PK för en entitet är `id` + `type`. `$1` och `$2` pekar ut root-entiteten och `$3` den typ som ska hittas bland kopplade entiteter.
+
+## Funderingar
+
+### Hämta data
+
+Möjligen måste `type` vara `dtmi:org:w3id:rec:Building;1` och inte bara `building`. Men det finns en CSV med översättningar för [endpoints](https://github.com/RealEstateCore/rec/blob/main/API/REST/Endpoints.csv).
+
+### Databas
+
+Bättre säkerhet för *magiska strängar* om de läggs in i en ENUM?
+
+```sql
+CREATE TYPE entity_type AS ENUM (
+  'dtmi:org:w3id:rec:Space;1',
+  'dtmi:org:w3id:rec:Building;1',
+  'dtmi:org:brickschema:schema:Brick:Sensor;1',
+  'dtmi:org:w3id:rec:ObservationEvent;1'
+);
+
+CREATE TYPE entity_context AS ENUM (
+  'https://dev.realestatecore.io/contexts/Space.jsonld',
+  'https://dev.realestatecore.io/contexts/Building.jsonld',
+  'https://dev.realestatecore.io/contexts/Sensor.jsonld',
+  'https://dev.realestatecore.io/contexts/ObservationEvent.jsonld'
+);
+
+CREATE TYPE quantity_kind AS ENUM (
+  'diwise:AirQuality'
+  'diwise:DigitalInput',
+  'diwise:Presence',
+  'Acceleration',
+  'Angle',
+  'AngularAcceleration',
+  'AngularVelocity',
+  'Area',
+  'Capacitance',
+  'Concentration',
+  'Conductivity',
+  'DataRate',
+  'DataSize',
+  'Density',
+  'Distance',
+  'Efficiency',
+  'ElectricCharge',
+  'ElectricCurrent',
+  'Energy',
+  'Force',
+  'Frequency',
+  'Illuminance',
+  'Inductance',
+  'Irradiance',
+  'Length',
+  'Luminance',
+  'LuminousFlux',
+  'LuminousIntensity',
+  'MagneticFlux',
+  'MagneticFluxDensity',
+  'Mass',
+  'MassFlowRate',
+  'Power',
+  'PowerFactor',
+  'Pressure',
+  'RelativeHumidity',
+  'Resistance',
+  'SoundPressureLevel',
+  'Temperature',
+  'Thrust',
+  'Time',
+  'Torque',
+  'Velocity',
+  'Voltage',
+  'Volume',
+  'VolumeFlowRate'
+);
+```

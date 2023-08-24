@@ -22,7 +22,12 @@ func main() {
 
 	db, err := database.Connect(ctx, database.LoadConfiguration(ctx))
 	if err != nil {
-		logger.Fatal().Err(err)
+		logger.Fatal().Err(err).Msg("connect failed")
+	}
+
+	err = db.Init(ctx)
+	if err != nil {
+		logger.Fatal().Err(err).Msg("init failed")
 	}
 
 	r := chi.NewRouter()

@@ -2,6 +2,7 @@ package database
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -21,6 +22,7 @@ type Config struct {
 }
 
 type Database interface {
+	Init(ctx context.Context) error
 	AddEntity(ctx context.Context, e Entity) error
 	GetEntity(ctx context.Context, entityID, entityType string) (Entity, error)
 	GetEntities(ctx context.Context, entityType string) ([]Entity, error)
@@ -69,6 +71,107 @@ func Connect(ctx context.Context, cfg Config) (Database, error) {
 	}
 
 	return &db, nil
+}
+
+func (db *databaseImpl) Init(ctx context.Context) error {
+	/*
+		_, _ = db.pool.Exec(ctx, `
+			CREATE TYPE entity_type AS ENUM (
+				'dtmi:org:w3id:rec:Space;1',
+				'dtmi:org:w3id:rec:Building;1',
+				'dtmi:org:brickschema:schema:Brick:Sensor;1',
+				'dtmi:org:w3id:rec:ObservationEvent;1'
+			);
+
+			CREATE TYPE entity_context AS ENUM (
+				'https://dev.realestatecore.io/contexts/Space.jsonld',
+				'https://dev.realestatecore.io/contexts/Building.jsonld',
+				'https://dev.realestatecore.io/contexts/Sensor.jsonld',
+				'https://dev.realestatecore.io/contexts/ObservationEvent.jsonld'
+			);
+
+			CREATE TYPE quantity_kind AS ENUM (
+				'diwise:AirQuality'
+				'diwise:DigitalInput',
+				'diwise:Presence',
+				'Acceleration',
+				'Angle',
+				'AngularAcceleration',
+				'AngularVelocity',
+				'Area',
+				'Capacitance',
+				'Concentration',
+				'Conductivity',
+				'DataRate',
+				'DataSize',
+				'Density',
+				'Distance',
+				'Efficiency',
+				'ElectricCharge',
+				'ElectricCurrent',
+				'Energy',
+				'Force',
+				'Frequency',
+				'Illuminance',
+				'Inductance',
+				'Irradiance',
+				'Length',
+				'Luminance',
+				'LuminousFlux',
+				'LuminousIntensity',
+				'MagneticFlux',
+				'MagneticFluxDensity',
+				'Mass',
+				'MassFlowRate',
+				'Power',
+				'PowerFactor',
+				'Pressure',
+				'RelativeHumidity',
+				'Resistance',
+				'SoundPressureLevel',
+				'Temperature',
+				'Thrust',
+				'Time',
+				'Torque',
+				'Velocity',
+				'Voltage',
+				'Volume',
+				'VolumeFlowRate'
+			);
+		`)
+	*/
+	_, err := db.pool.Exec(ctx, `
+		CREATE TABLE IF NOT EXISTS entity (
+			node_id        BIGSERIAL,
+			entity_id      TEXT NOT NULL,
+			entity_type    TEXT NOT NULL,
+			entity_context TEXT NOT NULL,
+			PRIMARY KEY (node_id)
+		);
+		
+		CREATE UNIQUE INDEX IF NOT EXISTS entity_entity_type_entity_id_unique_indx ON entity (entity_type, entity_id);
+		
+		CREATE TABLE IF NOT EXISTS  relation (
+			parent        BIGINT NOT NULL,
+			child         BIGINT NOT NULL,
+			PRIMARY KEY (parent, child)
+		);
+		
+		CREATE INDEX IF NOT EXISTS relation_child_parent_indx ON relation(child, parent);
+				
+		CREATE TABLE IF NOT EXISTS observations (
+			observation_id 		BIGSERIAL PRIMARY KEY,
+			device_id			TEXT NOT NULL,
+			sensor_id 			TEXT NOT NULL,
+			observation_time	TIMESTAMPTZ NOT NULL,
+			value 				NUMERIC NULL,
+			value_string		TEXT NULL,
+			value_boolean		BOOLEAN NULL,
+			quantity_kind		TEXT NOT NULL,
+			UNIQUE NULLS NOT DISTINCT (device_id, sensor_id, observation_time, value, value_string, value_boolean, quantity_kind)
+		);		
+	`)
+	return err
 }
 
 func (db *databaseImpl) getNodeID(ctx context.Context, entityID, entityType string) (int64, error) {
@@ -185,7 +288,7 @@ func (db *databaseImpl) GetEntities(ctx context.Context, entityType string) ([]E
 	rows, err := db.pool.Query(ctx, `
 		SELECT node_id, entity_id, entity_type, entity_context 
 		FROM entity 
-		WHERE entity_type = $1`,  entityType)
+		WHERE entity_type = $1`, entityType)
 	if err != nil {
 		return nil, err
 	}
@@ -196,7 +299,7 @@ func (db *databaseImpl) GetEntities(ctx context.Context, entityType string) ([]E
 	for rows.Next() {
 		var nodeId_ int64
 		var entityId_, entityType_, entityContext_ string
-		
+
 		err := rows.Scan(&nodeId_, &entityId_, &entityType_, &entityContext_)
 		if err != nil {
 			return nil, err
@@ -205,7 +308,7 @@ func (db *databaseImpl) GetEntities(ctx context.Context, entityType string) ([]E
 		e := Entity{
 			Context: entityContext_,
 			Id:      entityId_,
-			Type:    entityType_,			
+			Type:    entityType_,
 		}
 
 		parent, err := db.getParentEntity(ctx, nodeId_)
@@ -251,9 +354,11 @@ func (db *databaseImpl) GetEntity(ctx context.Context, entityID, entityType stri
 }
 
 func (db *databaseImpl) AddObservation(ctx context.Context, so SensorObservation) error {
+	log := logging.GetFromContext(ctx)
+
 	tx, err := db.pool.BeginTx(ctx, pgx.TxOptions{
-		IsoLevel: pgx.ReadCommitted,
-		AccessMode: pgx.ReadWrite,
+		IsoLevel:       pgx.ReadCommitted,
+		AccessMode:     pgx.ReadWrite,
 		DeferrableMode: pgx.Deferrable,
 	})
 	if err != nil {
@@ -261,9 +366,39 @@ func (db *databaseImpl) AddObservation(ctx context.Context, so SensorObservation
 	}
 
 	for _, o := range so.Observations {
-		_, err := db.pool.Exec(ctx, `
-			INSERT INTO observations (device_id, sensor_id, observationTime, value, valueString, valueBoolean, quantityKind) 
-			VALUES ($1, $2, $3, $4, $5, $6, $7)`, so.DeviceID, o.SensorId, o.ObservationTime, o.Value, o.ValueString, o.ValueBoolean, o.QuantityKind)	
+		row := db.pool.QueryRow(ctx, `
+			SELECT value, value_string, value_boolean 
+			FROM observations 
+			WHERE device_id = $1
+				AND sensor_id = $2					  
+				AND quantity_kind = $3
+				AND observation_time > $4
+			ORDER BY observation_time DESC
+			LIMIT 1
+			`, so.DeviceID, o.SensorId, o.QuantityKind, o.ObservationTime.Add(-1*time.Minute))
+
+		var v *float64
+		var vs *string
+		var vb *bool
+
+		err := row.Scan(&v, &vs, &vb)
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			tx.Rollback(ctx)
+			return err
+		}
+
+		if err == nil {
+			if ((v == nil && o.Value == nil) || ((v != nil && o.Value != nil) && (*v == *o.Value))) &&
+				((vb == nil && o.ValueBoolean == nil) || ((vb != nil && o.ValueBoolean != nil) && (*vb == *o.ValueBoolean))) &&
+				((vs == nil && o.ValueString == nil) || ((vs != nil && o.ValueString != nil) && (*vs == *o.ValueString))) {
+				log.Debug().Msgf("observation allready exists for %s", o.SensorId)
+				continue
+			}
+		}
+
+		_, err = db.pool.Exec(ctx, `
+			INSERT INTO observations (device_id, sensor_id, observation_time, value, value_string, value_boolean, quantity_kind) 
+			VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT DO NOTHING`, so.DeviceID, o.SensorId, o.ObservationTime, o.Value, o.ValueString, o.ValueBoolean, o.QuantityKind)
 		if err != nil {
 			tx.Rollback(ctx)
 			return err
@@ -275,11 +410,11 @@ func (db *databaseImpl) AddObservation(ctx context.Context, so SensorObservation
 
 func (db *databaseImpl) GetObservations(ctx context.Context, sensorId string, starting, ending time.Time) ([]Observation, error) {
 	rows, err := db.pool.Query(ctx, `
-		SELECT observationTime, value, valueString, valueBoolean, quantityKind 
+		SELECT observation_time, value, value_string, value_boolean, quantity_kind 
 		FROM observations
 		WHERE sensor_id = $1
-		  AND observationTime BETWEEN $2 AND $3
-		ORDER BY observationTime ASC`, sensorId, starting, ending)
+		  AND observation_time BETWEEN $2 AND $3
+		ORDER BY observation_time ASC`, sensorId, starting, ending)
 	if err != nil {
 		return nil, err
 	}
@@ -300,12 +435,12 @@ func (db *databaseImpl) GetObservations(ctx context.Context, sensorId string, st
 		}
 
 		observation := Observation{
-			SensorId: sensorId,
+			SensorId:        sensorId,
 			ObservationTime: ot,
-			Value: v,
-			ValueString: vs,
-			ValueBoolean: vb,
-			QuantityKind: qk,
+			Value:           v,
+			ValueString:     vs,
+			ValueBoolean:    vb,
+			QuantityKind:    qk,
 		}
 
 		observations = append(observations, observation)
@@ -313,97 +448,3 @@ func (db *databaseImpl) GetObservations(ctx context.Context, sensorId string, st
 
 	return observations, nil
 }
-
-/*
-
-CREATE TYPE entity_type AS ENUM (
-    'dtmi:org:w3id:rec:Space;1',
-	'dtmi:org:w3id:rec:Building;1',
-	'dtmi:org:brickschema:schema:Brick:Sensor;1',
-	'dtmi:org:w3id:rec:ObservationEvent;1'
-);
-
-CREATE TYPE entity_context AS ENUM (
-	'https://dev.realestatecore.io/contexts/Space.jsonld',
-	'https://dev.realestatecore.io/contexts/Building.jsonld',
-	'https://dev.realestatecore.io/contexts/Sensor.jsonld',
-	'https://dev.realestatecore.io/contexts/ObservationEvent.jsonld'
-);
-
-CREATE TABLE entity (
-    node_id        BIGSERIAL,
-	entity_id      TEXT NOT NULL,
-    entity_type    entity_type NOT NULL,
-	entity_context entity_context NOT NULL,
-    PRIMARY KEY (node_id)
-);
-
-CREATE UNIQUE INDEX entity_entity_type_entity_id_unique_indx ON entity (entity_type, entity_id);
-
-CREATE table relation (
-    parent        BIGINT NOT NULL,
-    child         BIGINT NOT NULL,
-    PRIMARY KEY (parent, child)
-);
-
-CREATE INDEX relation_child_parent_indx ON relation(child, parent);
-
-CREATE TYPE quantity_kind AS ENUM (
-	'Acceleration',
-	'Angle',
-	'AngularAcceleration',
-	'AngularVelocity',
-	'Area',
-	'Capacitance',
-	'Concentration',
-	'Conductivity',
-	'DataRate',
-	'DataSize',
-	'Density',
-	'Distance',
-	'Efficiency',
-	'ElectricCharge',
-	'ElectricCurrent',
-	'Energy',
-	'Force',
-	'Frequency',
-	'Illuminance',
-	'Inductance',
-	'Irradiance',
-	'Length',
-	'Luminance',
-	'LuminousFlux',
-	'LuminousIntensity',
-	'MagneticFlux',
-	'MagneticFluxDensity',
-	'Mass',
-	'MassFlowRate',
-	'Power',
-	'PowerFactor',
-	'Pressure',
-	'RelativeHumidity',
-	'Resistance',
-	'SoundPressureLevel',
-	'Temperature',
-	'Thrust',
-	'Time',
-	'Torque',
-	'Velocity',
-	'Voltage',
-	'Volume',
-	'VolumeFlowRate'
-);
-
-CREATE table observations (
-	observation_id 	BIGSERIAL,
-	device_id		TEXT NOT NULL,
-	sensor_id 		TEXT NOT NULL,
-	observationTime	TIMESTAMPTZ NOT NULL,
-	value 			NUMERIC NULL,
-	valueString		TEXT NULL,
-	valueBoolean	BOOLEAN NULL,
-	quantityKind	quantity_kind NOT NULL,
-	PRIMARY KEY (observation_id)
-);
-
-*/
