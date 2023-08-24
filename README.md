@@ -103,9 +103,9 @@ Några extra har skapats
 
 - diwise:AirQuality
 - diwise:DigitalInput
-- diwise:Presence
-- diwise:Lifebuoy
 - diwise:Level
+- diwise:Lifebuoy
+- diwise:Presence
 - diwise:Timer
 
 och fler eller andra kommer skapas vid behov.
@@ -113,7 +113,6 @@ och fler eller andra kommer skapas vid behov.
 [https://github.com/RealEstateCore/rec/blob/main/API/Edge/edge_message.schema.json](https://github.com/RealEstateCore/rec/blob/main/API/Edge/edge_message.schema.json)
 
 Skillnden mellan `deviceId` och `sensorId` är att ett `device` kan ha en eller flera `sensor`er i samma "låda".
-Dock har man i Iduns [exempel](https://github.com/idun-corp/Idun-Examples/blob/master/ProptechOS-Streaming-Api/examples/netcore/dedicated-processor/SensorObservation.cs) för ProptechOS `sensorId` för båda properties.
 
 ## Skapa struktur
 
