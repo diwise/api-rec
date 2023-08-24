@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"time"
 
 	"github.com/diwise/service-chassis/pkg/infrastructure/env"
@@ -23,6 +24,7 @@ type Config struct {
 
 type Database interface {
 	Init(ctx context.Context) error
+	Seed(ctx context.Context, reader io.Reader) error
 	AddEntity(ctx context.Context, e Entity) error
 	GetEntity(ctx context.Context, entityID, entityType string) (Entity, error)
 	GetEntities(ctx context.Context, entityType string) ([]Entity, error)
@@ -182,7 +184,7 @@ func (db *databaseImpl) getNodeID(ctx context.Context, entityID, entityType stri
 }
 
 func (db *databaseImpl) AddEntity(ctx context.Context, e Entity) error {
-	_, err := db.pool.Exec(ctx, "INSERT INTO entity (entity_id, entity_type, entity_context) VALUES ($1, $2, $3)", e.Id, e.Type, e.Context)
+	_, err := db.pool.Exec(ctx, "INSERT INTO entity (entity_id, entity_type, entity_context) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING", e.Id, e.Type, e.Context)
 	if err != nil {
 		return err
 	}
@@ -354,8 +356,6 @@ func (db *databaseImpl) GetEntity(ctx context.Context, entityID, entityType stri
 }
 
 func (db *databaseImpl) AddObservation(ctx context.Context, so SensorObservation) error {
-	log := logging.GetFromContext(ctx)
-
 	tx, err := db.pool.BeginTx(ctx, pgx.TxOptions{
 		IsoLevel:       pgx.ReadCommitted,
 		AccessMode:     pgx.ReadWrite,
@@ -391,7 +391,6 @@ func (db *databaseImpl) AddObservation(ctx context.Context, so SensorObservation
 			if ((v == nil && o.Value == nil) || ((v != nil && o.Value != nil) && (*v == *o.Value))) &&
 				((vb == nil && o.ValueBoolean == nil) || ((vb != nil && o.ValueBoolean != nil) && (*vb == *o.ValueBoolean))) &&
 				((vs == nil && o.ValueString == nil) || ((vs != nil && o.ValueString != nil) && (*vs == *o.ValueString))) {
-				log.Debug().Msgf("observation allready exists for %s", o.SensorId)
 				continue
 			}
 		}

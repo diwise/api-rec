@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"flag"
 	"net/http"
+	"os"
 
 	"github.com/diwise/api-rec/internal/pkg/infrastructure/database"
 	"github.com/diwise/api-rec/internal/pkg/presentation/api"
@@ -15,10 +17,15 @@ import (
 
 const serviceName string = "api-rec"
 
+var recInputDataFile string
+
 func main() {
 	serviceVersion := buildinfo.SourceVersion()
 	ctx, logger, cleanup := o11y.Init(context.Background(), serviceName, serviceVersion)
 	defer cleanup()
+
+	flag.StringVar(&recInputDataFile, "input", "/opt/diwise/config/rec.csv", "A file containing a known REC structure (spaces, buildings, sensors...)")
+	flag.Parse()
 
 	db, err := database.Connect(ctx, database.LoadConfiguration(ctx))
 	if err != nil {
@@ -28,6 +35,21 @@ func main() {
 	err = db.Init(ctx)
 	if err != nil {
 		logger.Fatal().Err(err).Msg("init failed")
+	}
+
+	if _, err := os.Stat(recInputDataFile); err == nil {
+		func() {
+			f, err := os.Open(recInputDataFile)
+			if err != nil {
+				logger.Fatal().Err(err).Msgf("failed to open input data file %s", recInputDataFile)
+			}
+			defer f.Close()
+
+			err = db.Seed(ctx, f)
+			if err != nil {
+				logger.Fatal().Err(err).Msg("failed to seed database")
+			}
+		}()
 	}
 
 	r := chi.NewRouter()
