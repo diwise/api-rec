@@ -365,3 +365,9 @@ CREATE TYPE quantity_kind AS ENUM (
   'VolumeFlowRate'
 );
 ```
+
+## Kvar att göra
+
+- säkerhet
+- bättre översättning mellan lwm2m och REC
+- bättre översättning mellan functions och REC

@@ -66,8 +66,8 @@ func RegisterEndpoints(ctx context.Context, r *chi.Mux, db database.Database) {
 				r.Post("/", createEntity(ctx, db))
 			})
 			r.Route("/observations", func(r chi.Router) {
-				r.Get("/", GetObservations(ctx, db))
-				r.Post("/", CreateObservation(ctx, db))
+				r.Get("/", getObservations(ctx, db))
+				r.Post("/", createObservation(ctx, db))
 			})
 			r.Route("/cloudevents", func(r chi.Router) {
 				r.Post("/", handleCloudevents(ctx, db))
@@ -193,7 +193,7 @@ func getRootEntity(ctx context.Context, r *http.Request, db database.Database) (
 	return root, true
 }
 
-func GetObservations(ctx context.Context, db database.Database) http.HandlerFunc {
+func getObservations(ctx context.Context, db database.Database) http.HandlerFunc {
 	log := logging.GetFromContext(ctx)
 
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -255,7 +255,7 @@ func GetObservations(ctx context.Context, db database.Database) http.HandlerFunc
 	}
 }
 
-func CreateObservation(ctx context.Context, db database.Database) http.HandlerFunc {
+func createObservation(ctx context.Context, db database.Database) http.HandlerFunc {
 	log := logging.GetFromContext(ctx)
 
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -565,23 +565,3 @@ const (
 	Temperature  string = lwm2mPrefix + "3303"
 	Watermeter   string = lwm2mPrefix + "3424"
 )
-
-/*
-
-{
-  "@context": "https://dev.realestatecore.io/contexts/Building.jsonld",
-  "@id": "671aee23-5be5-4e32-938f-a2956f565b89",
-  "@type": "dtmi:org:w3id:rec:Building;1"
-}
-
-{
-  "@context": "https://dev.realestatecore.io/contexts/Sensor.jsonld",
-  "@id": "00f67d60-d4d4-4bd5-af32-cf6c9b9310ec",
-  "@type": "dtmi:org:brickschema:schema:Brick:Sensor;1",
-  "isPartOf" : {
-    	"@id": "671aee23-5be5-4e32-938f-a2956f565b89",
-  	"@type": "dtmi:org:w3id:rec:Building;1"
-  }
-}
-
-*/
