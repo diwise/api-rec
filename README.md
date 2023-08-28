@@ -1,6 +1,6 @@
 # API-REC
 
-En *spike* för ett API. API:et är inspirerat/baserat på [specifikationen](https://github.com/RealEstateCore/rec/blob/main/API/REST/RealEstateCore_REST_specification.md) för REST-API:et i [RealEstateCore](https://dev.realestatecore.io/) (även kallat REC)
+API:et är inspirerat/baserat på [specifikationen](https://github.com/RealEstateCore/rec/blob/main/API/REST/RealEstateCore_REST_specification.md) för REST-API:et i [RealEstateCore](https://dev.realestatecore.io/) (även kallat REC).
 
 **POST** `/api/spaces`
 
@@ -25,6 +25,10 @@ En *spike* för ett API. API:et är inspirerat/baserat på [specifikationen](htt
 `hasObservationTime[starting]` - starttidpunkt för tidsspann med observationer
 
 `hasObservationTime[ending]` - sluttidpunkt för tidsspann med observationer
+
+`page` aktuell *sida* att hämta
+
+`size` antal objekt (buildings, sensors, observations o.dyl.) i varje *sida*
 
 ## Sensorvärden
 
@@ -164,7 +168,37 @@ För närvarande finns endpoints för `spaces`, `buildings` och `sensors`.
 
 Exempel med `/sensors`.
 
+`page=0` och `size=10` är default om inget annat anges. Med dessa parametrar kan man hämta delar av dataset:et. `hydra:totalItems` kommer att ha totalt antal objekt i det fullständiga svaret.
+
 `root[type]` och `root[id]` finns inte i spec, men faller in under [Advanced queries](https://github.com/RealEstateCore/rec/blob/main/API/REST/RealEstateCore_REST_specification.md#advanced-queries) och är tänkt svara på frågor som "ge mig alla sensorer i byggnad X".
+
+`hydra:view` visas enbart om det finns en uppdelning av dataset:et.
+
+**Obs** Används `root[type]` och `root[id]` så kommer inte `page=0` och/eller `size=10` att påverka något, utan då hämtas hela resultatet i samma fråga.
+
+```json
+{
+  "@context": "http://www.w3.org/ns/hydra/context.jsonld",
+  "@id": "/api/sensors",
+  "@type": "hydra:Collection",
+  "hydra:totalItems": 32,
+  "hydra:member": [
+    {
+      "@context": "https://dev.realestatecore.io/contexts/Sensor.jsonld",
+      "@id": "76bb4d31-1167-49e0-8766-768eb47c47e2",
+      "@type": "dtmi:org:brickschema:schema:Brick:Sensor;1",
+    },
+    ...
+  ],
+  "hydra:view": {
+      "@id": "/api/sensors?page=3",
+      "@type": "hydra:PartialCollectionView",
+      "first": "/api/sensors?page=0&size=10",
+      "previous": "/api/sensors?page=2&size=10",
+      "last": "/api/sensors?page=3&size=10"
+  }  
+}
+```
 
 ### Spaces, Buildings & Sensors
 
@@ -177,14 +211,15 @@ Hämtar alla sensorer som finns i byggnaden med id `79b30db6-c5d3-4cd1-a438-6d89
   "@context": "http://www.w3.org/ns/hydra/context.jsonld",
   "@id": "/api/sensors",
   "@type": "hydra:Collection",
-  "hydra:totalItems": 1,
+  "hydra:totalItems": 32,
   "hydra:member": [
     {
       "@context": "https://dev.realestatecore.io/contexts/Sensor.jsonld",
       "@id": "76bb4d31-1167-49e0-8766-768eb47c47e2",
       "@type": "dtmi:org:brickschema:schema:Brick:Sensor;1",
-    }
-  ]
+    },
+    ...
+  ]  
 }
 ```
 
@@ -193,6 +228,8 @@ Hämtar alla sensorer som finns i byggnaden med id `79b30db6-c5d3-4cd1-a438-6d89
 Se [Time interval queries](https://github.com/RealEstateCore/rec/blob/main/API/REST/RealEstateCore_REST_specification.md#time-interval-queries) för information.
 
 För `/observations` finns `?hasObservationTime[starting]` och `hasObservationTime[ending]` för att få ut data för ett visst tidsintervall.
+
+`page=0` och `size=10` funkar för observations på samma sätt som för t.ex. `/sensors`.
 
 **GET** `/observations?sensor_id=76bb4d31-1167-49e0-8766-768eb47c47e2&hasObservationTime[starting]=2023-08-01&hasObservationTime[ending]=2023-08-31`
 
@@ -210,7 +247,14 @@ För `/observations` finns `?hasObservationTime[starting]` och `hasObservationTi
             "sensorId": "vp1-em01"
         },
        ...
-    ]
+    ],
+    "hydra:view": {
+        "@id": "/observations?sensor_id=76bb4d31-1167-49e0-8766-768eb47c47e2&hasObservationTime[starting]=2023-08-01&hasObservationTime[ending]=2023-08-31",
+        "@type": "hydra:PartialCollectionView",
+        "first": "/observations?sensor_id=76bb4d31-1167-49e0-8766-768eb47c47e2&hasObservationTime[starting]=2023-08-01&hasObservationTime[ending]=2023-08-31&page=0&size=10",
+        "previous": "/observations?sensor_id=76bb4d31-1167-49e0-8766-768eb47c47e2&hasObservationTime[starting]=2023-08-01&hasObservationTime[ending]=2023-08-31&page=2&size=10",
+        "last": "/observations?sensor_id=76bb4d31-1167-49e0-8766-768eb47c47e2&hasObservationTime[starting]=2023-08-01&hasObservationTime[ending]=2023-08-31&page=3&size=10"
+    }      
 }
 ```
 
