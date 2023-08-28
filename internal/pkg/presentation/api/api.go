@@ -183,8 +183,7 @@ func getEntities(ctx context.Context, db database.Database, entityType string) h
 
 		root, rootOk := getRootEntity(ctx, r, db)
 
-		var entities []database.Entity
-		var totalItems int64 = 0
+		var entities []database.Entity		
 
 		page := 0
 		size := 10
@@ -217,7 +216,7 @@ func getEntities(ctx context.Context, db database.Database, entityType string) h
 			}
 			result = newHydraCollectionResult(r.URL, nil, entities, -1, -1, len(entities))
 		} else {
-			totalItems, entities, err = db.GetEntities(ctx, entityType, page, size)
+			totalItems, entities, err := db.GetEntities(ctx, entityType, page, size)
 			if err != nil {
 				requestLogger.Error().Err(err).Msgf("unable to load %s", entityType)
 				w.WriteHeader(http.StatusInternalServerError)
