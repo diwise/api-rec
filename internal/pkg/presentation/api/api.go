@@ -30,7 +30,7 @@ type hydraCollectionResult struct {
 	Type       string                 `json:"@type"`
 	TotalItems int                    `json:"hydra:totalItems"`
 	Member     any                    `json:"hydra:member"`
-	View       *partialCollectionView `json:"view,omitempty"`
+	View       *partialCollectionView `json:"hydra:view,omitempty"`
 }
 
 type partialCollectionView struct {
@@ -183,7 +183,7 @@ func getEntities(ctx context.Context, db database.Database, entityType string) h
 
 		root, rootOk := getRootEntity(ctx, r, db)
 
-		var entities []database.Entity		
+		var entities []database.Entity
 
 		page := 0
 		size := 10
