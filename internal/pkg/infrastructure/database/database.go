@@ -27,10 +27,10 @@ type Database interface {
 	Seed(ctx context.Context, reader io.Reader) error
 	AddEntity(ctx context.Context, e Entity) error
 	GetEntity(ctx context.Context, entityID, entityType string) (Entity, error)
-	GetEntities(ctx context.Context, entityType string) ([]Entity, error)
+	GetEntities(ctx context.Context, entityType string, page, size int) (int64, []Entity, error)
 	GetChildEntities(ctx context.Context, root Entity, entityType string) ([]Entity, error)
 	AddObservation(ctx context.Context, so SensorObservation) error
-	GetObservations(ctx context.Context, sensorId string, starting, ending time.Time) ([]Observation, error)
+	GetObservations(ctx context.Context, sensorId string, starting, ending time.Time, page, size int) (int64, []Observation, error)
 }
 
 type databaseImpl struct {
@@ -286,31 +286,34 @@ func (db *databaseImpl) GetChildEntities(ctx context.Context, root Entity, entit
 	return entities, nil
 }
 
-func (db *databaseImpl) GetEntities(ctx context.Context, entityType string) ([]Entity, error) {
+func (db *databaseImpl) GetEntities(ctx context.Context, entityType string, page, size int) (int64, []Entity, error) {
 	rows, err := db.pool.Query(ctx, `
-		SELECT node_id, entity_id, entity_type, entity_context 
+		SELECT node_id, entity_id, entity_context, count(*) OVER() AS full_count  
 		FROM entity 
-		WHERE entity_type = $1`, entityType)
+		WHERE entity_type = $1
+		ORDER BY entity_id ASC
+		OFFSET $2 LIMIT $3`, entityType, page, size)
 	if err != nil {
-		return nil, err
+		return 0, nil, err
 	}
 	defer rows.Close()
 
 	entities := make([]Entity, 0)
+	var fullCount int64
 
 	for rows.Next() {
 		var nodeId_ int64
-		var entityId_, entityType_, entityContext_ string
+		var entityId_, entityContext_ string
 
-		err := rows.Scan(&nodeId_, &entityId_, &entityType_, &entityContext_)
+		err := rows.Scan(&nodeId_, &entityId_, &entityContext_, &fullCount)
 		if err != nil {
-			return nil, err
+			return 0, nil, err
 		}
 
 		e := Entity{
 			Context: entityContext_,
 			Id:      entityId_,
-			Type:    entityType_,
+			Type:    entityType,
 		}
 
 		parent, err := db.getParentEntity(ctx, nodeId_)
@@ -324,14 +327,18 @@ func (db *databaseImpl) GetEntities(ctx context.Context, entityType string) ([]E
 		entities = append(entities, e)
 	}
 
-	return entities, nil
+	return fullCount, entities, nil
 }
 
 func (db *databaseImpl) GetEntity(ctx context.Context, entityID, entityType string) (Entity, error) {
 	var nodeId_ int64
 	var entityId_, entityType_, entityContext_ string
 
-	row := db.pool.QueryRow(ctx, "SELECT node_id, entity_id, entity_type, entity_context FROM entity WHERE entity_id = $1 AND entity_type = $2", entityID, entityType)
+	row := db.pool.QueryRow(ctx, `
+		SELECT node_id, entity_id, entity_type, entity_context 
+		FROM entity 
+		WHERE entity_id = $1 
+		  AND entity_type = $2`, entityID, entityType)
 
 	err := row.Scan(&nodeId_, &entityId_, &entityType_, &entityContext_)
 	if err != nil {
@@ -407,19 +414,24 @@ func (db *databaseImpl) AddObservation(ctx context.Context, so SensorObservation
 	return tx.Commit(ctx)
 }
 
-func (db *databaseImpl) GetObservations(ctx context.Context, sensorId string, starting, ending time.Time) ([]Observation, error) {
+func (db *databaseImpl) GetObservations(ctx context.Context, sensorId string, starting, ending time.Time, page, size int) (int64, []Observation, error) {
+	limit := size
+	offset := page * size
+
 	rows, err := db.pool.Query(ctx, `
-		SELECT observation_time, value, value_string, value_boolean, quantity_kind 
+		SELECT observation_time, value, value_string, value_boolean, quantity_kind, count(*) OVER() AS full_count 
 		FROM observations
 		WHERE sensor_id = $1
 		  AND observation_time BETWEEN $2 AND $3
-		ORDER BY observation_time ASC`, sensorId, starting, ending)
+		ORDER BY observation_time ASC
+		OFFSET $4 LIMIT $5`, sensorId, starting, ending, offset, limit)
 	if err != nil {
-		return nil, err
+		return 0, nil, err
 	}
 	defer rows.Close()
 
 	observations := make([]Observation, 0)
+	var fullCount int64
 
 	for rows.Next() {
 		var ot time.Time
@@ -428,9 +440,9 @@ func (db *databaseImpl) GetObservations(ctx context.Context, sensorId string, st
 		var vb *bool
 		var qk string
 
-		err := rows.Scan(&ot, &v, &vs, &vb, &qk)
+		err := rows.Scan(&ot, &v, &vs, &vb, &qk, &fullCount)
 		if err != nil {
-			return nil, err
+			return 0, nil, err
 		}
 
 		observation := Observation{
@@ -445,5 +457,5 @@ func (db *databaseImpl) GetObservations(ctx context.Context, sensorId string, st
 		observations = append(observations, observation)
 	}
 
-	return observations, nil
+	return fullCount, observations, nil
 }

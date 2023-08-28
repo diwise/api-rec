@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -23,21 +25,61 @@ import (
 var tracer = otel.Tracer("api-rec/api")
 
 type hydraCollectionResult struct {
-	Context    string `json:"@context"`
-	Id         string `json:"@id"`
-	Type       string `json:"@type"`
-	TotalItems int    `json:"hydra:totalItems"`
-	Member     any    `json:"hydra:member"`
+	Context    string                 `json:"@context"`
+	Id         string                 `json:"@id"`
+	Type       string                 `json:"@type"`
+	TotalItems int                    `json:"hydra:totalItems"`
+	Member     any                    `json:"hydra:member"`
+	View       *partialCollectionView `json:"view,omitempty"`
 }
 
-func newHydraCollectionResult(id string, member any, totalItems int) hydraCollectionResult {
-	return hydraCollectionResult{
+type partialCollectionView struct {
+	Id       string `json:"@id"`
+	Type     string `json:"@type"`
+	First    string `json:"first"`
+	Previous string `json:"previous,omitempty"`
+	Next     string `json:"next,omitempty"`
+	Last     string `json:"last"`
+}
+
+func newHydraCollectionResult(url *url.URL, qry *url.Values, member any, page, size, totalItems int) hydraCollectionResult {
+	r := hydraCollectionResult{
 		Context:    "http://www.w3.org/ns/hydra/context.jsonld",
-		Id:         id,
+		Id:         url.Path,
 		Type:       "hydra:Collection",
 		TotalItems: totalItems,
 		Member:     member,
 	}
+
+	if qry != nil {
+		reqUri := url.Path + "?" + qry.Encode()
+		currentPageN := page
+		firstPageN := 0
+		previousPageN := currentPageN - 1
+		nextPageN := currentPageN + 1
+		lastPageN := totalItems / size
+
+		getPageUrl := func(p int) string {
+			if p < 0 {
+				return ""
+			}
+			if p > lastPageN {
+				return ""
+			}
+			return strings.Replace(reqUri, fmt.Sprintf("page=%d", page), fmt.Sprintf("page=%d", p), -1)
+		}
+
+		r.View = &partialCollectionView{
+			Id:       url.RequestURI(),
+			Type:     "hydra:PartialCollectionView",
+			First:    getPageUrl(firstPageN),
+			Previous: getPageUrl(previousPageN),
+			Next:     getPageUrl(nextPageN),
+			Last:     getPageUrl(lastPageN),
+		}
+	}
+
+	return r
 }
 
 func RegisterEndpoints(ctx context.Context, r *chi.Mux, db database.Database) {
@@ -142,6 +184,29 @@ func getEntities(ctx context.Context, db database.Database, entityType string) h
 		root, rootOk := getRootEntity(ctx, r, db)
 
 		var entities []database.Entity
+		var totalItems int64 = 0
+
+		page := 0
+		size := 10
+		var result hydraCollectionResult
+
+		q := r.URL.Query()
+
+		if p := q.Get("page"); p != "" {
+			if i, err := strconv.ParseInt(p, 10, 32); err == nil {
+				page = int(i)
+			}
+		} else {
+			q.Add("page", "0")
+		}
+
+		if p := r.URL.Query().Get("size"); p != "" {
+			if i, err := strconv.ParseInt(p, 10, 32); err == nil {
+				size = int(i)
+			}
+		} else {
+			q.Add("size", "10")
+		}
 
 		if rootOk {
 			entities, err = db.GetChildEntities(ctx, root, entityType)
@@ -150,16 +215,16 @@ func getEntities(ctx context.Context, db database.Database, entityType string) h
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
+			result = newHydraCollectionResult(r.URL, nil, entities, -1, -1, len(entities))
 		} else {
-			entities, err = db.GetEntities(ctx, entityType)
+			totalItems, entities, err = db.GetEntities(ctx, entityType, page, size)
 			if err != nil {
 				requestLogger.Error().Err(err).Msgf("unable to load %s", entityType)
 				w.WriteHeader(http.StatusInternalServerError)
 				return
 			}
+			result = newHydraCollectionResult(r.URL, &q, entities, page, size, int(totalItems))
 		}
-
-		result := newHydraCollectionResult(r.URL.String(), entities, len(entities))
 
 		b, err := json.Marshal(result)
 		if err != nil {
@@ -210,10 +275,30 @@ func getObservations(ctx context.Context, db database.Database) http.HandlerFunc
 			return
 		}
 
+		page := 0
+		size := 10
 		startingTime, _ := time.Parse(time.RFC3339, "1970-01-01")
 		endingTime := time.Now().UTC()
 
-		starting := r.URL.Query().Get("hasObservationTime[starting]")
+		q := r.URL.Query()
+
+		if p := q.Get("page"); p != "" {
+			if i, err := strconv.ParseInt(p, 10, 32); err == nil {
+				page = int(i)
+			}
+		} else {
+			q.Add("page", "0")
+		}
+
+		if p := r.URL.Query().Get("size"); p != "" {
+			if i, err := strconv.ParseInt(p, 10, 32); err == nil {
+				size = int(i)
+			}
+		} else {
+			q.Add("size", "10")
+		}
+
+		starting := q.Get("hasObservationTime[starting]")
 		if starting != "" {
 			startingTime, err = time.Parse(time.RFC3339, starting)
 			if err != nil {
@@ -223,7 +308,7 @@ func getObservations(ctx context.Context, db database.Database) http.HandlerFunc
 			}
 		}
 
-		ending := r.URL.Query().Get("hasObservationTime[ending]")
+		ending := q.Get("hasObservationTime[ending]")
 		if ending != "" {
 			endingTime, err = time.Parse(time.RFC3339, ending)
 			if err != nil {
@@ -233,14 +318,14 @@ func getObservations(ctx context.Context, db database.Database) http.HandlerFunc
 			}
 		}
 
-		observations, err := db.GetObservations(ctx, sensorId, startingTime, endingTime)
+		totalItems, observations, err := db.GetObservations(ctx, sensorId, startingTime, endingTime, page, size)
 		if err != nil {
 			requestLogger.Error().Err(err).Msg("could not load observations")
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 
-		result := newHydraCollectionResult(r.URL.Path, observations, len(observations))
+		result := newHydraCollectionResult(r.URL, &q, observations, page, size, int(totalItems))
 
 		b, err := json.Marshal(result)
 		if err != nil {

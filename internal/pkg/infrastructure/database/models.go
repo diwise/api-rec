@@ -47,7 +47,7 @@ const (
 	ObservationEventTypeName string = "observationevent"
 )
 
-func GetTypeFromTypeName(typeName string) string {	
+func GetTypeFromTypeName(typeName string) string {
 	switch strings.ToLower(typeName) {
 	case SpaceTypeName:
 		return SpaceType
