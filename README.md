@@ -1,6 +1,5 @@
 # API-REC
 
-
 API:et är inspirerat/baserat på [specifikationen](https://github.com/RealEstateCore/rec/blob/main/API/REST/RealEstateCore_REST_specification.md) för REST-API:et i [RealEstateCore](https://dev.realestatecore.io/) (även kallat REC).
 
 **POST** `/api/spaces`
