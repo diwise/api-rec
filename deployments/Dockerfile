@@ -19,7 +19,7 @@ RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build
 
 FROM registry.access.redhat.com/ubi9/ubi-minimal
 
-LABEL org.opencontainers.image.source https://github.com/diwise/api-rec
+#LABEL org.opencontainers.image.source https://github.com/diwise/api-rec
 
 WORKDIR /opt/diwise
 
