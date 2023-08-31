@@ -416,3 +416,4 @@ CREATE TYPE quantity_kind AS ENUM (
 - bättre översättning mellan functions och REC
 - test
 - ???
+
