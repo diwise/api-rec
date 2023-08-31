@@ -58,7 +58,6 @@ subscribers:
     tenants:
       - default
     entities:
-
 ```
 
 Flödet blir då: sensor -> iot-agent -> iot-events -> cloudevents -> api-rec
