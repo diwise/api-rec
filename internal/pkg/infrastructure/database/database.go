@@ -170,7 +170,7 @@ func (db *databaseImpl) Init(ctx context.Context) error {
 			value_string		TEXT NULL,
 			value_boolean		BOOLEAN NULL,
 			quantity_kind		TEXT NOT NULL,
-			UNIQUE NULLS NOT DISTINCT (device_id, sensor_id, observation_time, value, value_string, value_boolean, quantity_kind)
+			UNIQUE (device_id, sensor_id, observation_time, quantity_kind)
 		);		
 	`)
 	return err
@@ -404,7 +404,7 @@ func (db *databaseImpl) AddObservation(ctx context.Context, so SensorObservation
 
 		_, err = db.pool.Exec(ctx, `
 			INSERT INTO observations (device_id, sensor_id, observation_time, value, value_string, value_boolean, quantity_kind) 
-			VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT DO NOTHING`, so.DeviceID, o.SensorId, o.ObservationTime, o.Value, o.ValueString, o.ValueBoolean, o.QuantityKind)
+			VALUES ($1, $2, $3, $4, $5, $6, $7)`, so.DeviceID, o.SensorId, o.ObservationTime, o.Value, o.ValueString, o.ValueBoolean, o.QuantityKind)
 		if err != nil {
 			tx.Rollback(ctx)
 			return err
