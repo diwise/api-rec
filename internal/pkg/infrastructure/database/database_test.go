@@ -187,7 +187,7 @@ func TestAddAndGetObservations(t *testing.T) {
 	}
 
 	now := time.Now().UTC()
-	v := 14.0
+	v := 14.123456789
 	deviceID := uuid.New().String()
 	sensorID := uuid.New().String()
 

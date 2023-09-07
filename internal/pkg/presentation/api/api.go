@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -535,7 +536,7 @@ func (m functionUpdated) mapToObservation() (database.SensorObservation, bool) {
 	case "waterquality":
 		so.Observations = append(so.Observations, database.Observation{
 			ObservationTime: m.WaterQuality.Timestamp,
-			Value:           &m.WaterQuality.Temperature,
+			Value:           mapFloatValue(&m.WaterQuality.Temperature, 2),
 			QuantityKind:    "Temperature",
 			SensorId:        m.Id,
 		})
@@ -559,7 +560,7 @@ func (m messageAccepted) mapToObservation() (database.SensorObservation, bool) {
 	observationTime := mapTime(m.Pack[0].BaseTime)
 	quantityKind := mapQuantityKind(m)
 
-	value := m.Pack[1].Value
+	value := mapFloatValue(m.Pack[1].Value, 2)
 	valueString := mapValueString(m.Pack[1].StringValue)
 	valueBoolean := m.Pack[1].BoolValue
 
@@ -631,6 +632,16 @@ func mapValueString(vs string) *string {
 		return nil
 	}
 	return &vs
+}
+
+func mapFloatValue(v *float64, d uint) *float64 {
+	if v == nil {
+		return nil
+	}
+
+	unit := math.Pow(10, float64(d))
+	f := math.Round(*v*unit) / unit
+	return &f
 }
 
 const (
