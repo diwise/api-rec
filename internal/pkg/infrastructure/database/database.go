@@ -50,6 +50,17 @@ func LoadConfiguration(ctx context.Context) Config {
 	}
 }
 
+func NewConfig(host, user, password, port, dbname, sslmode string) Config {
+	return Config{
+		host:     host,
+		user:     user,
+		password: password,
+		port:     port,
+		dbname:   dbname,
+		sslmode:  sslmode,
+	}
+}
+
 func (c Config) ConnStr() string {
 	return fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=%s", c.user, c.password, c.host, c.port, c.dbname, c.sslmode)
 }
@@ -143,8 +154,7 @@ func (db *databaseImpl) Init(ctx context.Context) error {
 		`)
 	*/
 
-	_, err := db.pool.Exec(ctx, `
-		
+	_, err := db.pool.Exec(ctx, `		
 		CREATE TABLE IF NOT EXISTS entity (
 			node_id        BIGSERIAL,
 			entity_id      TEXT NOT NULL,
