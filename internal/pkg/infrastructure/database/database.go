@@ -142,7 +142,9 @@ func (db *databaseImpl) Init(ctx context.Context) error {
 			);
 		`)
 	*/
+
 	_, err := db.pool.Exec(ctx, `
+		
 		CREATE TABLE IF NOT EXISTS entity (
 			node_id        BIGSERIAL,
 			entity_id      TEXT NOT NULL,
@@ -169,9 +171,12 @@ func (db *databaseImpl) Init(ctx context.Context) error {
 			value 				NUMERIC NULL,
 			value_string		TEXT NULL,
 			value_boolean		BOOLEAN NULL,
-			quantity_kind		TEXT NOT NULL,
-			UNIQUE (device_id, sensor_id, observation_time, quantity_kind)
+			quantity_kind		TEXT NOT NULL			
 		);		
+
+		ALTER TABLE observations DROP CONSTRAINT IF EXISTS observations_device_id_sensor_id_observation_time_value_val_key;
+
+		CREATE UNIQUE INDEX IF NOT EXISTS observations_device_id_sensor_id_observation_time_quantity_kind_indx ON observations (device_id, sensor_id, observation_time, quantity_kind);
 	`)
 	return err
 }
