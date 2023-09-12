@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/diwise/api-rec/internal/pkg/application"
 	"github.com/diwise/api-rec/internal/pkg/infrastructure/database"
 	"github.com/diwise/api-rec/internal/pkg/presentation/api"
 	"github.com/diwise/service-chassis/pkg/infrastructure/buildinfo"
@@ -52,9 +53,11 @@ func main() {
 		}()
 	}
 
+	app := application.New(db)
+
 	r := chi.NewRouter()
 
-	api.RegisterEndpoints(ctx, r, db)
+	api.RegisterEndpoints(ctx, r, app)
 
 	servicePort := env.GetVariableOrDefault(logger, "SERVICE_PORT", "8080")
 	err = http.ListenAndServe(":"+servicePort, r)
