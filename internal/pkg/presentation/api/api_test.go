@@ -10,6 +10,7 @@ import (
 	"time"
 
 	cloudevents "github.com/cloudevents/sdk-go/v2"
+	"github.com/diwise/api-rec/internal/pkg/application"
 	"github.com/diwise/api-rec/internal/pkg/infrastructure/database"
 	"github.com/farshidtz/senml/v2"
 	"github.com/google/uuid"
@@ -18,7 +19,7 @@ import (
 
 func TestMapToObservation(t *testing.T) {
 	v := 1.23456789
-	m := messageAccepted{
+	m := application.MessageAccepted{
 		SensorID:  uuid.New().String(),
 		Timestamp: time.Now(),
 		Pack: senml.Pack{
@@ -32,7 +33,7 @@ func TestMapToObservation(t *testing.T) {
 		},
 	}
 
-	o, _ := m.mapToObservation()
+	o, _ := m.MapToObservation()
 
 	if *o.Observations[0].Value != 1.23 {
 		t.FailNow()
@@ -99,13 +100,15 @@ func TestCloudevents(t *testing.T) {
 		t.SkipNow()
 	}
 
-	srv := httptest.NewServer(handleCloudevents(ctx, db))
+	app := application.New(db)
+
+	srv := httptest.NewServer(handleCloudevents(ctx, app))
 
 	sensorID := uuid.New().String()
 	now := time.Now()
-	
+
 	v := 1.232
-	m := messageAccepted{
+	m := application.MessageAccepted{
 		SensorID:  sensorID,
 		Timestamp: time.Now(),
 		Pack: senml.Pack{
@@ -124,7 +127,7 @@ func TestCloudevents(t *testing.T) {
 
 	err = cloudEventSenderFunc(ctx, eventInfo{
 		endpoint:  srv.URL,
-		eventType: MessageAccepted,
+		eventType: application.MessageAcceptedName,
 		data:      b,
 		id:        uuid.New().String(),
 		timestamp: time.Now(),
@@ -140,19 +143,20 @@ func TestCloudevents(t *testing.T) {
 
 	err = cloudEventSenderFunc(ctx, eventInfo{
 		endpoint:  srv.URL,
-		eventType: MessageAccepted,
+		eventType: application.MessageAcceptedName,
 		data:      b,
 		id:        uuid.New().String(),
 		timestamp: time.Now(),
 		source:    "test",
 	})
 	if err != nil {
+		t.Log("could not send cloudevent")
 		t.FailNow()
 	}
 
 	count, observations, err := db.GetObservations(ctx, sensorID, now.Add(-1*time.Second), now.Add(1*time.Minute), 0, 10)
 	if err != nil {
-		t.Log("could not send cloudevent")
+		t.Log("could not fetch observations")
 		t.FailNow()
 	}
 
