@@ -195,7 +195,7 @@ Exempel med `/sensors`.
       "first": "/api/sensors?page=0&size=10",
       "previous": "/api/sensors?page=2&size=10",
       "last": "/api/sensors?page=3&size=10"
-  }  
+  }
 }
 ```
 
@@ -218,7 +218,7 @@ Hämtar alla sensorer som finns i byggnaden med id `79b30db6-c5d3-4cd1-a438-6d89
       "@type": "dtmi:org:brickschema:schema:Brick:Sensor;1",
     },
     ...
-  ]  
+  ]
 }
 ```
 
@@ -226,11 +226,11 @@ Hämtar alla sensorer som finns i byggnaden med id `79b30db6-c5d3-4cd1-a438-6d89
 
 Se [Time interval queries](https://github.com/RealEstateCore/rec/blob/main/API/REST/RealEstateCore_REST_specification.md#time-interval-queries) för information.
 
-För `/observations` finns `?hasObservationTime[starting]` och `hasObservationTime[ending]` för att få ut data för ett visst tidsintervall.
+För `/observations` finns `?hasObservationTime[starting]` och `hasObservationTime[ending]` för att få ut data för ett visst tidsintervall. Datum måste vara formaterade enl. [RFC3339](https://datatracker.ietf.org/doc/html/rfc3339#section-5.8)
 
 `page=0` och `size=10` funkar för observations på samma sätt som för t.ex. `/sensors`.
 
-**GET** `/observations?sensor_id=76bb4d31-1167-49e0-8766-768eb47c47e2&hasObservationTime[starting]=2023-08-01&hasObservationTime[ending]=2023-08-31`
+**GET** `/observations?sensor_id=76bb4d31-1167-49e0-8766-768eb47c47e2&hasObservationTime[starting]=2019-05-27T20:07:44Z&hasObservationTime[ending]=2019-06-27T20:07:44Z`
 
 ```json
 {
@@ -240,7 +240,7 @@ För `/observations` finns `?hasObservationTime[starting]` och `hasObservationTi
     "hydra:totalItems": 78,
     "hydra:member": [
         {
-            "observationTime": "2023-08-24T09:18:29Z",
+            "observationTime": "2020-04-27T10:18:12Z",
             "value": 12380400000000,
             "quantityKind": "Energy",
             "sensorId": "vp1-em01"
@@ -248,16 +248,16 @@ För `/observations` finns `?hasObservationTime[starting]` och `hasObservationTi
        ...
     ],
     "hydra:view": {
-        "@id": "/observations?sensor_id=76bb4d31-1167-49e0-8766-768eb47c47e2&hasObservationTime[starting]=2023-08-01&hasObservationTime[ending]=2023-08-31",
+        "@id": "/observations?sensor_id=76bb4d31-1167-49e0-8766-768eb47c47e2&hasObservationTime[starting]=2019-05-27T20:07:44Z&hasObservationTime[ending]=2019-06-27T20:07:44Z",
         "@type": "hydra:PartialCollectionView",
-        "first": "/observations?sensor_id=76bb4d31-1167-49e0-8766-768eb47c47e2&hasObservationTime[starting]=2023-08-01&hasObservationTime[ending]=2023-08-31&page=0&size=10",
-        "previous": "/observations?sensor_id=76bb4d31-1167-49e0-8766-768eb47c47e2&hasObservationTime[starting]=2023-08-01&hasObservationTime[ending]=2023-08-31&page=2&size=10",
-        "last": "/observations?sensor_id=76bb4d31-1167-49e0-8766-768eb47c47e2&hasObservationTime[starting]=2023-08-01&hasObservationTime[ending]=2023-08-31&page=3&size=10"
-    }      
+        "first": "/observations?sensor_id=76bb4d31-1167-49e0-8766-768eb47c47e2&hasObservationTime[starting]=2019-05-27T20:07:44Z&hasObservationTime[ending]=2019-06-27T20:07:44Z&page=0&size=10",
+        "previous": "/observations?sensor_id=76bb4d31-1167-49e0-8766-768eb47c47e2&hasObservationTime[starting]=2019-05-27T20:07:44Z&hasObservationTime[ending]=2019-06-27T20:07:44Z&page=2&size=10",
+        "last": "/observations?sensor_id=76bb4d31-1167-49e0-8766-768eb47c47e2&hasObservationTime[starting]=2019-05-27T20:07:44Z&hasObservationTime[ending]=2019-06-27T20:07:44Z&page=3&size=10"
+    }
 }
 ```
 
-*Det finns logik som hindrar att samma värde lagras flera gånger inom en tidsperiod (nu 1 minut), dvs om sensor-X skickar värdet `42` n gånger inom samma tidsperiod kommer enbart värdet lagras första gången, de andra gångerna kastas värdet. Om sensorn däremot skickar `42`, `43`, `42` inom samma tidsperiod kommer alla tre värden att lagras.*
+*Det finns logik som hindrar att samma värde lagras flera gånger inom en tidsperiod (nu 1 minut), dvs om sensor X skickar värdet `42` n gånger inom samma tidsperiod kommer enbart värdet lagras första gången, de andra gångerna kastas värdet. Om sensorn däremot skickar `42`, `43`, `42` inom samma tidsperiod kommer alla tre värden att lagras.*
 
 ## Databas
 
@@ -267,38 +267,38 @@ En graf skapas med två tabeller tills det behövs en riktig grafdatabashanterar
 
 ```sql
 CREATE TABLE IF NOT EXISTS entity (
-    node_id        BIGSERIAL,
-    entity_id      TEXT NOT NULL,
-    entity_type    TEXT NOT NULL,
-    entity_context TEXT NOT NULL,
-    PRIMARY KEY (node_id)
+  node_id        BIGSERIAL,
+  entity_id      TEXT NOT NULL,
+  entity_type    TEXT NOT NULL,
+  entity_context TEXT NOT NULL,
+  PRIMARY KEY (node_id)
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS entity_entity_type_entity_id_unique_indx ON entity (entity_type, entity_id);
 
 CREATE TABLE IF NOT EXISTS  relation (
-    parent        BIGINT NOT NULL,
-    child         BIGINT NOT NULL,
-    PRIMARY KEY (parent, child)
+  parent        BIGINT NOT NULL,
+  child         BIGINT NOT NULL,
+  PRIMARY KEY (parent, child)
 );
 
 CREATE INDEX IF NOT EXISTS relation_child_parent_indx ON relation(child, parent);
 
 CREATE TABLE IF NOT EXISTS observations (
-    observation_id    BIGSERIAL PRIMARY KEY,
-    device_id         TEXT NOT NULL,
-    sensor_id         TEXT NOT NULL,
-    observation_time  TIMESTAMPTZ NOT NULL,
-    value             NUMERIC NULL,
-    value_string      TEXT NULL,
-    value_boolean     BOOLEAN NULL,
-    quantity_kind     TEXT NOT NULL,
-    UNIQUE NULLS NOT DISTINCT (device_id, sensor_id, observation_time, value, value_string, value_boolean, quantity_kind)
+  observation_id 		BIGSERIAL PRIMARY KEY,
+  device_id			TEXT NOT NULL,
+  sensor_id 			TEXT NOT NULL,
+  observation_time	TIMESTAMPTZ NOT NULL,
+  value 				NUMERIC NULL,
+  value_string		TEXT NULL,
+  value_boolean		BOOLEAN NULL,
+  quantity_kind		TEXT NOT NULL
 );
 
-```
+ALTER TABLE observations DROP CONSTRAINT IF EXISTS observations_device_id_sensor_id_observation_time_value_val_key;
 
-**OBS!** `NULL NOT DISTINCT` kräver Postgres 15 eller senare.
+CREATE UNIQUE INDEX IF NOT EXISTS observations_device_id_sensor_id_observation_time_quantity_kind_indx ON observations (device_id, sensor_id, observation_time, quantity_kind);
+```
 
 ### SQL
 
@@ -408,11 +408,3 @@ CREATE TYPE quantity_kind AS ENUM (
   'VolumeFlowRate'
 );
 ```
-
-## Kvar att göra
-
-- säkerhet
-- bättre översättning mellan lwm2m och REC
-- bättre översättning mellan functions och REC
-- test
-- ???
