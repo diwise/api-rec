@@ -230,7 +230,7 @@ För `/observations` finns `?hasObservationTime[starting]` och `hasObservationTi
 
 `page=0` och `size=10` funkar för observations på samma sätt som för t.ex. `/sensors`.
 
-**GET** `/observations?sensor_id=76bb4d31-1167-49e0-8766-768eb47c47e2&hasObservationTime[starting]=2019-05-27T20:07:44Z&hasObservationTime[ending]=2019-06-27T20:07:44Z`
+**GET** `/observations?sensorId=76bb4d31-1167-49e0-8766-768eb47c47e2&hasObservationTime[starting]=2019-05-27T20:07:44Z&hasObservationTime[ending]=2019-06-27T20:07:44Z`
 
 ```json
 {
@@ -248,11 +248,11 @@ För `/observations` finns `?hasObservationTime[starting]` och `hasObservationTi
        ...
     ],
     "hydra:view": {
-        "@id": "/observations?sensor_id=76bb4d31-1167-49e0-8766-768eb47c47e2&hasObservationTime[starting]=2019-05-27T20:07:44Z&hasObservationTime[ending]=2019-06-27T20:07:44Z",
+        "@id": "/observations?sensorId=76bb4d31-1167-49e0-8766-768eb47c47e2&hasObservationTime[starting]=2019-05-27T20:07:44Z&hasObservationTime[ending]=2019-06-27T20:07:44Z",
         "@type": "hydra:PartialCollectionView",
-        "first": "/observations?sensor_id=76bb4d31-1167-49e0-8766-768eb47c47e2&hasObservationTime[starting]=2019-05-27T20:07:44Z&hasObservationTime[ending]=2019-06-27T20:07:44Z&page=0&size=10",
-        "previous": "/observations?sensor_id=76bb4d31-1167-49e0-8766-768eb47c47e2&hasObservationTime[starting]=2019-05-27T20:07:44Z&hasObservationTime[ending]=2019-06-27T20:07:44Z&page=2&size=10",
-        "last": "/observations?sensor_id=76bb4d31-1167-49e0-8766-768eb47c47e2&hasObservationTime[starting]=2019-05-27T20:07:44Z&hasObservationTime[ending]=2019-06-27T20:07:44Z&page=3&size=10"
+        "first": "/observations?sensorId=76bb4d31-1167-49e0-8766-768eb47c47e2&hasObservationTime[starting]=2019-05-27T20:07:44Z&hasObservationTime[ending]=2019-06-27T20:07:44Z&page=0&size=10",
+        "previous": "/observations?sensorId=76bb4d31-1167-49e0-8766-768eb47c47e2&hasObservationTime[starting]=2019-05-27T20:07:44Z&hasObservationTime[ending]=2019-06-27T20:07:44Z&page=2&size=10",
+        "last": "/observations?sensorId=76bb4d31-1167-49e0-8766-768eb47c47e2&hasObservationTime[starting]=2019-05-27T20:07:44Z&hasObservationTime[ending]=2019-06-27T20:07:44Z&page=3&size=10"
     }
 }
 ```

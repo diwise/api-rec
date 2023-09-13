@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/diwise/api-rec/internal/pkg/infrastructure/database"
 	"github.com/farshidtz/senml/v2"
 	"github.com/google/uuid"
+	"github.com/matryer/is"
 	"golang.org/x/sys/unix"
 )
 
@@ -169,4 +171,26 @@ func TestCloudevents(t *testing.T) {
 		t.Logf("value should be 1.23, is = %f", *observations[0].Value)
 		t.FailNow()
 	}
+}
+
+func TestNewHydraCollectionResult(t *testing.T) {
+	is := is.New(t)
+
+	ctx := context.WithValue(context.Background(), settingsKey, apiSettings{
+		ApiPath: "/replce/with/this",
+	})
+
+	u, _ := url.Parse("http://test.diwise.io/api/rec/observations?sensorId=76bb4d31-1167-49e0-8766-768eb47c47e2&hasObservationTime[starting]=2019-05-27T20:07:44Z&hasObservationTime[ending]=2019-06-27T20:07:44Z")
+
+	result := newHydraCollectionResult(ctx, u, nil, 100)
+	is.True(result.View != nil)
+	is.True(result.View.Previous == "")
+
+	result = newHydraCollectionResult(ctx, u, nil, 8)
+	is.True(result.View == nil)
+
+	u, _ = url.Parse("http://test.diwise.io/api/rec/observations?page=10&sensorId=76bb4d31-1167-49e0-8766-768eb47c47e2&hasObservationTime[starting]=2019-05-27T20:07:44Z&hasObservationTime[ending]=2019-06-27T20:07:44Z")
+	result = newHydraCollectionResult(ctx, u, nil, 100)
+	is.True(result.View != nil)
+	is.True(result.View.Next == "")
 }
