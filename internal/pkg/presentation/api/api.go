@@ -20,6 +20,7 @@ import (
 	"github.com/diwise/service-chassis/pkg/infrastructure/o11y/tracing"
 	"github.com/go-chi/chi/v5"
 	"github.com/rs/cors"
+	"github.com/rs/zerolog"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
 )
@@ -179,11 +180,11 @@ func RegisterEndpoints(ctx context.Context, r *chi.Mux, app application.Applicat
 }
 
 func SettingsCtx(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		log := logging.GetFromContext(r.Context())
+	apiPath := env.GetVariableOrDefault(zerolog.Logger{}, "API_PATH", "")
 
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		settings := apiSettings{
-			ApiPath: env.GetVariableOrDefault(log, "API_PATH", ""),
+			ApiPath: apiPath,
 		}
 
 		ctx := context.WithValue(r.Context(), settingsKey, settings)
@@ -402,7 +403,7 @@ func handleCloudevents(ctx context.Context, app application.Application) http.Ha
 	log := logging.GetFromContext(ctx)
 
 	eventCounter, err := otel.Meter("api-rec/cloudevents").Int64Counter(
-		"api-rec.cloudevents.total",
+		"diwise.cloudevents.total",
 		metric.WithUnit("1"),
 		metric.WithDescription("Total number of received cloudevents"),
 	)
