@@ -22,6 +22,7 @@ import (
 	"github.com/rs/cors"
 	"github.com/rs/zerolog"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/metric"
 )
 
 var tracer = otel.Tracer("api-rec/api")
@@ -44,19 +45,46 @@ type partialCollectionView struct {
 	Last     string `json:"last"`
 }
 
-var apiPath *string = nil
+type key int
 
-func urlPath(url *url.URL) string {
-	if apiPath != nil {
-		return *apiPath
-	}
-	p := env.GetVariableOrDefault(zerolog.Logger{}, "API_PATH", url.Path)
-	apiPath = &p
+var settingsKey key
 
-	return *apiPath
+type apiSettings struct {
+	ApiPath string
 }
 
-func newHydraCollectionResult(url *url.URL, qry *url.Values, member any, page, size, totalItems int) hydraCollectionResult {
+func (a apiSettings) Replace(urlPath string) string {
+	if a.ApiPath != "" {
+		return strings.Replace(urlPath, "/api", a.ApiPath, 1)
+	}
+	return urlPath
+}
+
+func getIntOrDefault(url *url.URL, key string, i int) int {
+	value := url.Query().Get(key)
+	if value == "" {
+		return i
+	}
+	v, err := strconv.ParseInt(value, 10, 32)
+	if err != nil {
+		return i
+	}
+	return int(v)
+}
+
+func getTimeOrDefault(url *url.URL, key string, t time.Time) (time.Time, error) {
+	st := url.Query().Get(key)
+	if st == "" {
+		return t, nil
+	}
+	pt, err := time.Parse(time.RFC3339, st)
+	if err != nil {
+		return time.Unix(0, 0), err
+	}
+	return pt, nil
+}
+
+func newHydraCollectionResult(ctx context.Context, url *url.URL, member any, totalItems int) hydraCollectionResult {
 	r := hydraCollectionResult{
 		Context:    "http://www.w3.org/ns/hydra/context.jsonld",
 		Id:         url.Path,
@@ -65,19 +93,36 @@ func newHydraCollectionResult(url *url.URL, qry *url.Values, member any, page, s
 		Member:     member,
 	}
 
-	if qry != nil {
-		reqUri := urlPath(url) + "?" + qry.Encode()
-		currentPageN := page
-		firstPageN := 0
-		previousPageN := currentPageN - 1
-		nextPageN := currentPageN + 1
-		lastPageN := totalItems / size
+	q := url.Query()
+	page := getIntOrDefault(url, "page", 0)
+	size := getIntOrDefault(url, "size", 10)
+
+	if q.Has("page") {
+		q.Set("page", fmt.Sprintf("%d", page))
+	} else {
+		q.Add("page", fmt.Sprintf("%d", page))
+	}
+
+	if q.Has("size") {
+		q.Set("size", fmt.Sprintf("%d", size))
+	} else {
+		q.Add("size", fmt.Sprintf("%d", size))
+	}
+
+	if totalItems > size {
+		settings := ctx.Value(settingsKey).(apiSettings)
+
+		reqUri := settings.Replace(url.Path) + "?" + q.Encode()
+
+		previous := page - 1
+		next := page + 1
+		last := totalItems / size
 
 		getPageUrl := func(p int) string {
 			if p < 0 {
 				return ""
 			}
-			if p > lastPageN {
+			if p > last {
 				return ""
 			}
 			return strings.Replace(reqUri, fmt.Sprintf("page=%d", page), fmt.Sprintf("page=%d", p), -1)
@@ -86,10 +131,10 @@ func newHydraCollectionResult(url *url.URL, qry *url.Values, member any, page, s
 		r.View = &partialCollectionView{
 			Id:       url.RequestURI(),
 			Type:     "hydra:PartialCollectionView",
-			First:    getPageUrl(firstPageN),
-			Previous: getPageUrl(previousPageN),
-			Next:     getPageUrl(nextPageN),
-			Last:     getPageUrl(lastPageN),
+			First:    getPageUrl(0),
+			Previous: getPageUrl(previous),
+			Next:     getPageUrl(next),
+			Last:     getPageUrl(last),
 		}
 	}
 
@@ -109,6 +154,8 @@ func RegisterEndpoints(ctx context.Context, r *chi.Mux, app application.Applicat
 
 	r.Route("/api", func(r chi.Router) {
 		r.Group(func(r chi.Router) {
+			r.Use(SettingsCtx)
+
 			r.Route("/spaces", func(r chi.Router) {
 				r.Get("/", getEntities(ctx, app, database.SpaceType))
 				r.Post("/", createEntity(ctx, app))
@@ -129,6 +176,19 @@ func RegisterEndpoints(ctx context.Context, r *chi.Mux, app application.Applicat
 				r.Post("/", handleCloudevents(ctx, app))
 			})
 		})
+	})
+}
+
+func SettingsCtx(next http.Handler) http.Handler {
+	apiPath := env.GetVariableOrDefault(zerolog.Logger{}, "API_PATH", "")
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		settings := apiSettings{
+			ApiPath: apiPath,
+		}
+
+		ctx := context.WithValue(r.Context(), settingsKey, settings)
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
@@ -198,28 +258,7 @@ func getEntities(ctx context.Context, app application.Application, entityType st
 		root, rootOk := getRootEntity(ctx, r, app)
 
 		var entities []database.Entity
-
-		page := 0
-		size := 10
 		var result hydraCollectionResult
-
-		q := r.URL.Query()
-
-		if p := q.Get("page"); p != "" {
-			if i, err := strconv.ParseInt(p, 10, 32); err == nil {
-				page = int(i)
-			}
-		} else {
-			q.Add("page", "0")
-		}
-
-		if p := r.URL.Query().Get("size"); p != "" {
-			if i, err := strconv.ParseInt(p, 10, 32); err == nil {
-				size = int(i)
-			}
-		} else {
-			q.Add("size", "10")
-		}
 
 		if rootOk {
 			entities, err = app.GetChildEntities(ctx, root, entityType)
@@ -228,15 +267,15 @@ func getEntities(ctx context.Context, app application.Application, entityType st
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
-			result = newHydraCollectionResult(r.URL, nil, entities, -1, -1, len(entities))
+			result = newHydraCollectionResult(ctx, r.URL, entities, len(entities))
 		} else {
-			totalItems, entities, err := app.GetEntities(ctx, entityType, page, size)
+			totalItems, entities, err := app.GetEntities(ctx, entityType, getIntOrDefault(r.URL, "page", 0), getIntOrDefault(r.URL, "size", 10))
 			if err != nil {
 				requestLogger.Error().Err(err).Msgf("unable to load %s", entityType)
 				w.WriteHeader(http.StatusInternalServerError)
 				return
 			}
-			result = newHydraCollectionResult(r.URL, &q, entities, page, size, int(totalItems))
+			result = newHydraCollectionResult(ctx, r.URL, entities, int(totalItems))
 		}
 
 		b, err := json.Marshal(result)
@@ -281,64 +320,34 @@ func getObservations(ctx context.Context, app application.Application) http.Hand
 		defer func() { tracing.RecordAnyErrorAndEndSpan(err, span) }()
 		_, ctx, requestLogger := o11y.AddTraceIDToLoggerAndStoreInContext(span, log, ctx)
 
-		sensorId := r.URL.Query().Get("sensor_id")
+		sensorId := r.URL.Query().Get("sensorId")
 		if sensorId == "" {
 			requestLogger.Error().Err(err).Msg("no ID in query string")
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
 
-		page := 0
-		size := 10
-		startingTime, _ := time.Parse(time.RFC3339, "1970-01-01")
-		endingTime := time.Now().UTC()
-
-		q := r.URL.Query()
-
-		if p := q.Get("page"); p != "" {
-			if i, err := strconv.ParseInt(p, 10, 32); err == nil {
-				page = int(i)
-			}
-		} else {
-			q.Add("page", "0")
+		startingTime, err := getTimeOrDefault(r.URL, "hasObservationTime[starting]", time.Date(1970, 1, 1, 0, 0, 0, 0, time.UTC))
+		if err != nil {
+			requestLogger.Error().Err(err).Msg("starting time in wrong format, must be RFC3339")
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		endingTime, err := getTimeOrDefault(r.URL, "hasObservationTime[ending]", time.Now().UTC())
+		if err != nil {
+			requestLogger.Error().Err(err).Msg("ending time in wrong format, must be RFC3339")
+			w.WriteHeader(http.StatusBadRequest)
+			return
 		}
 
-		if p := r.URL.Query().Get("size"); p != "" {
-			if i, err := strconv.ParseInt(p, 10, 32); err == nil {
-				size = int(i)
-			}
-		} else {
-			q.Add("size", "10")
-		}
-
-		starting := q.Get("hasObservationTime[starting]")
-		if starting != "" {
-			startingTime, err = time.Parse(time.RFC3339, starting)
-			if err != nil {
-				requestLogger.Error().Err(err).Msg("starting time in wrong format")
-				w.WriteHeader(http.StatusBadRequest)
-				return
-			}
-		}
-
-		ending := q.Get("hasObservationTime[ending]")
-		if ending != "" {
-			endingTime, err = time.Parse(time.RFC3339, ending)
-			if err != nil {
-				requestLogger.Error().Err(err).Msg("ending time in wrong format")
-				w.WriteHeader(http.StatusBadRequest)
-				return
-			}
-		}
-
-		totalItems, observations, err := app.GetObservations(ctx, sensorId, startingTime, endingTime, page, size)
+		totalItems, observations, err := app.GetObservations(ctx, sensorId, startingTime, endingTime, getIntOrDefault(r.URL, "page", 0), getIntOrDefault(r.URL, "size", 10))
 		if err != nil {
 			requestLogger.Error().Err(err).Msg("could not load observations")
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 
-		result := newHydraCollectionResult(r.URL, &q, observations, page, size, int(totalItems))
+		result := newHydraCollectionResult(ctx, r.URL, observations, int(totalItems))
 
 		b, err := json.Marshal(result)
 		if err != nil {
@@ -393,6 +402,16 @@ func createObservation(ctx context.Context, app application.Application) http.Ha
 func handleCloudevents(ctx context.Context, app application.Application) http.HandlerFunc {
 	log := logging.GetFromContext(ctx)
 
+	eventCounter, err := otel.Meter("api-rec/cloudevents").Int64Counter(
+		"diwise.cloudevents.total",
+		metric.WithUnit("1"),
+		metric.WithDescription("Total number of received cloudevents"),
+	)
+
+	if err != nil {
+		log.Error().Err(err).Msg("failed to create otel cloudevent counter")
+	}
+
 	return func(w http.ResponseWriter, r *http.Request) {
 		var err error
 		defer r.Body.Close()
@@ -407,6 +426,8 @@ func handleCloudevents(ctx context.Context, app application.Application) http.Ha
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
+
+		eventCounter.Add(ctx, 1)
 
 		var observation database.SensorObservation
 		var observationOk bool = false

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/matryer/is"
 )
 
 func connect() (context.Context, context.CancelFunc, Database, error) {
@@ -316,4 +317,35 @@ spaces;buildings;sensors
 		t.Logf("expected %s but got %s", buildingID, e[0].IsPartOf.Id)
 		t.FailNow()
 	}
+}
+
+func TestIsValueEqual(t *testing.T) {
+	is := is.New(t)
+
+	o := Observation{
+		ObservationTime: time.Now(),
+		Value:           nil,
+		ValueString:     nil,
+		ValueBoolean:    nil,
+		QuantityKind:    "test",
+		SensorId:        uuid.NewString(),
+	}
+
+	v := 1.234
+	vs := "str"
+	vb := false
+
+	is.True(!isValueEqual(o, &v, &vs, &vb))
+
+	o.Value = &v
+	is.True(!isValueEqual(o, &v, &vs, &vb))
+
+	o.ValueString = &vs
+	is.True(!isValueEqual(o, &v, &vs, &vb))
+
+	o.ValueBoolean = &vb
+	is.True(isValueEqual(o, &v, &vs, &vb))
+
+	o.Value = nil
+	is.True(isValueEqual(o, nil, &vs, &vb))
 }

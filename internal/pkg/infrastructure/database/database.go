@@ -186,7 +186,7 @@ func (db *databaseImpl) Init(ctx context.Context) error {
 
 		ALTER TABLE observations DROP CONSTRAINT IF EXISTS observations_device_id_sensor_id_observation_time_value_val_key;
 
-		CREATE UNIQUE INDEX IF NOT EXISTS observations_device_id_sensor_id_observation_time_quantity_kind_indx ON observations (device_id, sensor_id, observation_time, quantity_kind);
+		CREATE INDEX IF NOT EXISTS observations_device_id_sensor_id_observation_time_quantity_kind_indx ON observations (device_id, sensor_id, observation_time, quantity_kind);
 	`)
 	return err
 }
@@ -409,12 +409,8 @@ func (db *databaseImpl) AddObservation(ctx context.Context, so SensorObservation
 			return err
 		}
 
-		if err == nil {
-			if ((v == nil && o.Value == nil) || ((v != nil && o.Value != nil) && (*v == *o.Value))) &&
-				((vb == nil && o.ValueBoolean == nil) || ((vb != nil && o.ValueBoolean != nil) && (*vb == *o.ValueBoolean))) &&
-				((vs == nil && o.ValueString == nil) || ((vs != nil && o.ValueString != nil) && (*vs == *o.ValueString))) {
-				continue
-			}
+		if err == nil && isValueEqual(o, v, vs, vb) {
+			continue
 		}
 
 		_, err = db.pool.Exec(ctx, `
@@ -427,6 +423,30 @@ func (db *databaseImpl) AddObservation(ctx context.Context, so SensorObservation
 	}
 
 	return tx.Commit(ctx)
+}
+
+func isValueEqual(observation Observation, v *float64, vs *string, vb *bool) bool {
+	eqV, eqVs, eqVb := false, false, false
+
+	if v == nil && observation.Value == nil {
+		eqV = true
+	} else if v != nil && observation.Value != nil {
+		eqV = *v == *observation.Value
+	}
+
+	if vs == nil && observation.ValueString == nil {
+		eqVs = true
+	} else if vs != nil && observation.ValueString != nil {
+		eqVs = *vs == *observation.ValueString
+	}
+
+	if vb == nil && observation.ValueBoolean == nil {
+		eqVb = true
+	} else if vb != nil && observation.ValueBoolean != nil {
+		eqVb = *vb == *observation.ValueBoolean
+	}
+
+	return eqV && eqVs && eqVb
 }
 
 func (db *databaseImpl) GetObservations(ctx context.Context, sensorId string, starting, ending time.Time, page, size int) (int64, []Observation, error) {
