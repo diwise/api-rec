@@ -24,7 +24,6 @@ WORKDIR /opt/diwise
 COPY --from=builder --chown=1001 /app/cmd/api-rec/api-rec /opt/diwise
 
 RUN chown 1001 /opt/diwise
-RUN chmod 700 /opt/diwise
 
 EXPOSE 8080
 USER 1001
