@@ -20,7 +20,6 @@ import (
 	"github.com/diwise/service-chassis/pkg/infrastructure/o11y/tracing"
 	"github.com/go-chi/chi/v5"
 	"github.com/rs/cors"
-	"github.com/rs/zerolog"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
 )
@@ -180,7 +179,7 @@ func RegisterEndpoints(ctx context.Context, r *chi.Mux, app application.Applicat
 }
 
 func SettingsCtx(next http.Handler) http.Handler {
-	apiPath := env.GetVariableOrDefault(zerolog.Logger{}, "API_PATH", "")
+	apiPath := env.GetVariableOrDefault(context.Background(), "API_PATH", "")
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		settings := apiSettings{
@@ -205,7 +204,7 @@ func createEntity(ctx context.Context, app application.Application) http.Handler
 
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
-			requestLogger.Error().Err(err).Msg("unable to read body")
+			requestLogger.Error("unable to read body", "err", err.Error())
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
@@ -213,28 +212,28 @@ func createEntity(ctx context.Context, app application.Application) http.Handler
 		var e database.Entity
 		err = json.Unmarshal(body, &e)
 		if err != nil {
-			requestLogger.Error().Err(err).Msg("unable to unmarshal body")
+			requestLogger.Error("unable to unmarshal body", "err", err.Error())
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
 
 		err = app.AddEntity(ctx, e)
 		if err != nil {
-			requestLogger.Error().Err(err).Msgf("unable to add entity [%s]", e.Type)
+			requestLogger.Error("unable to add entity", "type", e.Type, "err", err.Error())
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
 
 		e, err = app.GetEntity(ctx, e.Id, e.Type)
 		if err != nil {
-			requestLogger.Error().Err(err).Msgf("unable to fetch entity [%s]", e.Type)
+			requestLogger.Error("unable to fetch entity", "type", e.Type, "err", err.Error())
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 
 		b, err := json.Marshal(e)
 		if err != nil {
-			requestLogger.Error().Err(err).Msgf("unable marshal entity [%s]", e.Type)
+			requestLogger.Error("unable marshal entity", "type", e.Type, "err", err.Error())
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -263,7 +262,7 @@ func getEntities(ctx context.Context, app application.Application, entityType st
 		if rootOk {
 			entities, err = app.GetChildEntities(ctx, root, entityType)
 			if err != nil {
-				requestLogger.Error().Err(err).Msg("could not load entities from root entity")
+				requestLogger.Error("could not load entities from root entity", "err", err.Error())
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
@@ -271,7 +270,7 @@ func getEntities(ctx context.Context, app application.Application, entityType st
 		} else {
 			totalItems, entities, err := app.GetEntities(ctx, entityType, getIntOrDefault(r.URL, "page", 0), getIntOrDefault(r.URL, "size", 10))
 			if err != nil {
-				requestLogger.Error().Err(err).Msgf("unable to load %s", entityType)
+				requestLogger.Error("unable to load entities", "type", entityType, "err", err.Error())
 				w.WriteHeader(http.StatusInternalServerError)
 				return
 			}
@@ -280,7 +279,7 @@ func getEntities(ctx context.Context, app application.Application, entityType st
 
 		b, err := json.Marshal(result)
 		if err != nil {
-			requestLogger.Error().Err(err).Msgf("unable marshal result")
+			requestLogger.Error("unable marshal result", "err", err.Error())
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -322,27 +321,27 @@ func getObservations(ctx context.Context, app application.Application) http.Hand
 
 		sensorId := r.URL.Query().Get("sensorId")
 		if sensorId == "" {
-			requestLogger.Error().Err(err).Msg("no ID in query string")
+			requestLogger.Error("no ID in query string", "err", err.Error())
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
 
 		startingTime, err := getTimeOrDefault(r.URL, "hasObservationTime[starting]", time.Date(1970, 1, 1, 0, 0, 0, 0, time.UTC))
 		if err != nil {
-			requestLogger.Error().Err(err).Msg("starting time in wrong format, must be RFC3339")
+			requestLogger.Error("starting time in wrong format, must be RFC3339", "err", err.Error())
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
 		endingTime, err := getTimeOrDefault(r.URL, "hasObservationTime[ending]", time.Now().UTC())
 		if err != nil {
-			requestLogger.Error().Err(err).Msg("ending time in wrong format, must be RFC3339")
+			requestLogger.Error("ending time in wrong format, must be RFC3339", "err", err.Error())
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
 
 		totalItems, observations, err := app.GetObservations(ctx, sensorId, startingTime, endingTime, getIntOrDefault(r.URL, "page", 0), getIntOrDefault(r.URL, "size", 10))
 		if err != nil {
-			requestLogger.Error().Err(err).Msg("could not load observations")
+			requestLogger.Error("could not load observations", "err", err.Error())
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -351,7 +350,7 @@ func getObservations(ctx context.Context, app application.Application) http.Hand
 
 		b, err := json.Marshal(result)
 		if err != nil {
-			requestLogger.Error().Err(err).Msgf("unable marshal observations result")
+			requestLogger.Error("unable marshal observations result", "err", err.Error())
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -375,7 +374,7 @@ func createObservation(ctx context.Context, app application.Application) http.Ha
 
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
-			requestLogger.Error().Err(err).Msg("unable to read body")
+			requestLogger.Error("unable to read body", "err", err.Error())
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
@@ -383,14 +382,14 @@ func createObservation(ctx context.Context, app application.Application) http.Ha
 		var so database.SensorObservation
 		err = json.Unmarshal(body, &so)
 		if err != nil {
-			requestLogger.Error().Err(err).Msg("unable to unmarshal body")
+			requestLogger.Error("unable to unmarshal body", "err", err.Error())
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
 
 		err = app.AddObservation(ctx, so)
 		if err != nil {
-			requestLogger.Error().Err(err).Msg("unable to create observation")
+			requestLogger.Error("unable to create observation", "err", err.Error())
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -409,7 +408,7 @@ func handleCloudevents(ctx context.Context, app application.Application) http.Ha
 	)
 
 	if err != nil {
-		log.Error().Err(err).Msg("failed to create otel cloudevent counter")
+		log.Error("failed to create otel cloudevent counter", "err", err.Error())
 	}
 
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -422,7 +421,7 @@ func handleCloudevents(ctx context.Context, app application.Application) http.Ha
 
 		event, err := cloudevents.NewEventFromHTTPRequest(r)
 		if err != nil {
-			requestLogger.Error().Err(err).Msg("failed to parse CloudEvent from request")
+			requestLogger.Error("failed to parse cloud event from request", "err", err.Error())
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
@@ -437,7 +436,7 @@ func handleCloudevents(ctx context.Context, app application.Application) http.Ha
 			var ma application.MessageAccepted
 			err := json.Unmarshal(event.Data(), &ma)
 			if err != nil {
-				requestLogger.Error().Err(err).Msg("failed to parse message.accepted in cloud event")
+				requestLogger.Error("failed to parse message.accepted in cloud event", "err", err.Error())
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
@@ -446,7 +445,7 @@ func handleCloudevents(ctx context.Context, app application.Application) http.Ha
 			var fu application.FunctionUpdated
 			err := json.Unmarshal(event.Data(), &fu)
 			if err != nil {
-				requestLogger.Error().Err(err).Msg("failed to parse function.updated in cloud event")
+				requestLogger.Error("failed to parse function.updated in cloud event", "err", err.Error())
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
@@ -456,14 +455,14 @@ func handleCloudevents(ctx context.Context, app application.Application) http.Ha
 		if observationOk {
 			err = app.AddObservation(ctx, observation)
 			if err != nil {
-				requestLogger.Error().Err(err).Msg("failed to store observation")
+				requestLogger.Error("failed to store observation", "err", err.Error())
 				w.WriteHeader(http.StatusInternalServerError)
 				return
 			}
 			w.WriteHeader(http.StatusCreated)
 			return
 		} else {
-			requestLogger.Error().Err(err).Msg("failed to map incomming message to observation")
+			requestLogger.Error("failed to map incomming message to observation", "err", err.Error())
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}

@@ -38,15 +38,13 @@ type databaseImpl struct {
 }
 
 func LoadConfiguration(ctx context.Context) Config {
-	log := logging.GetFromContext(ctx)
-
 	return Config{
-		host:     env.GetVariableOrDefault(log, "POSTGRES_HOST", ""),
-		user:     env.GetVariableOrDefault(log, "POSTGRES_USER", ""),
-		password: env.GetVariableOrDefault(log, "POSTGRES_PASSWORD", ""),
-		port:     env.GetVariableOrDefault(log, "POSTGRES_PORT", "5432"),
-		dbname:   env.GetVariableOrDefault(log, "POSTGRES_DBNAME", "diwise"),
-		sslmode:  env.GetVariableOrDefault(log, "POSTGRES_SSLMODE", "disable"),
+		host:     env.GetVariableOrDefault(ctx, "POSTGRES_HOST", ""),
+		user:     env.GetVariableOrDefault(ctx, "POSTGRES_USER", ""),
+		password: env.GetVariableOrDefault(ctx, "POSTGRES_PASSWORD", ""),
+		port:     env.GetVariableOrDefault(ctx, "POSTGRES_PORT", "5432"),
+		dbname:   env.GetVariableOrDefault(ctx, "POSTGRES_DBNAME", "diwise"),
+		sslmode:  env.GetVariableOrDefault(ctx, "POSTGRES_SSLMODE", "disable"),
 	}
 }
 
@@ -77,7 +75,7 @@ func Connect(ctx context.Context, cfg Config) (Database, error) {
 	}
 
 	log := logging.GetFromContext(ctx)
-	log.Debug().Msgf("connected to %s", cfg.host)
+	log.Debug("connected to host", "host", cfg.host)
 
 	db := databaseImpl{
 		pool: conn,
