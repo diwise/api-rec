@@ -316,7 +316,7 @@ func getObservations(ctx context.Context, app application.Application) http.Hand
 	return func(w http.ResponseWriter, r *http.Request) {
 		var err error
 
-		ctx, span := tracer.Start(r.Context(), "get-sensors")
+		ctx, span := tracer.Start(r.Context(), "get-observations")
 		defer func() { tracing.RecordAnyErrorAndEndSpan(err, span) }()
 		_, ctx, requestLogger := o11y.AddTraceIDToLoggerAndStoreInContext(span, log, ctx)
 
